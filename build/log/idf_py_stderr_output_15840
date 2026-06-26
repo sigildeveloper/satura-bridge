@@ -1,0 +1,4 @@
+warning: config BTSTACK_INTERNAL_BT (defined at C:/Users/Ivan/satura_bridge/components/btstack-esp32/Kconfig:13) has a "visible if" option, which is not supported for configs
+warning: BT (defined at C:/Users/Ivan/satura_bridge/components/btstack-esp32/Kconfig:72) defined without a type
+info: Trying to set symbol BT_BLUEDROID_ENABLED to n, but it is currently selected by choice BT_HOST. For setting it to n, set another choice symbol to y instead.
+BTstack root: "C:/Users/Ivan/satura_bridge/components/btstack"

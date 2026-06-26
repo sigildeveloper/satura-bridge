@@ -1,0 +1,26 @@
+# ESP-IDF build artifacts
+build/
+.cache/
+dependencies.lock
+sdkconfig.old
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Backup files
+*копия*
+*.bak
+*.test
+*.orig
+
+# Logs
+*.log
+idf_py_stderr_output_*
+idf_py_stdout_output_*

@@ -1,0 +1,193 @@
+[0;32mI (13) boot: ESP-IDF v5.4.4 2nd stage bootloader[0m
+[0;32mI (13) boot: compile time Jun 25 2026 10:52:26[0m
+[0;32mI (13) boot: Multicore bootloader[0m
+[0;32mI (14) boot: chip revision: v3.0[0m
+[0;32mI (16) boot.esp32: SPI Speed      : 40MHz[0m
+[0;32mI (20) boot.esp32: SPI Mode       : DIO[0m
+[0;32mI (24) boot.esp32: SPI Flash Size : 2MB[0m
+[0;32mI (27) boot: Enabling RNG early entropy source...[0m
+[0;32mI (32) boot: Partition Table:[0m
+[0;32mI (34) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (41) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (47) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (54) boot:  2 factory          factory app      00 00 00010000 00177000[0m
+[0;32mI (60) boot: End of partition table[0m
+[0;32mI (63) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=20cd8h (134360) map[0m
+[0;32mI (117) esp_image: segment 1: paddr=00030d00 vaddr=3ffbdb60 size=05c04h ( 23556) load[0m
+[0;32mI (126) esp_image: segment 2: paddr=0003690c vaddr=40080000 size=0970ch ( 38668) load[0m
+[0;32mI (141) esp_image: segment 3: paddr=00040020 vaddr=400d0020 size=96afch (617212) map[0m
+[0;32mI (352) esp_image: segment 4: paddr=000d6b24 vaddr=4008970c size=14318h ( 82712) load[0m
+[0;32mI (384) esp_image: segment 5: paddr=000eae44 vaddr=50000000 size=0001ch (    28) load[0m
+[0;32mI (399) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (399) boot: Disabling RNG early entropy source...[0m
+[0;32mI (410) cpu_start: Multicore app[0m
+[0;32mI (418) cpu_start: GPIO 3 and 1 are used as console UART I/O pins[0m
+[0;32mI (418) cpu_start: Pro cpu start user code[0m
+[0;32mI (418) cpu_start: cpu freq: 240000000 Hz[0m
+[0;32mI (420) app_init: Application information:[0m
+[0;32mI (424) app_init: Project name:     satura-bridge[0m
+[0;32mI (428) app_init: App version:      1[0m
+[0;32mI (432) app_init: Compile time:     Jun 25 2026 10:52:13[0m
+[0;32mI (437) app_init: ELF file SHA256:  e2dfb7cd1...[0m
+[0;32mI (441) app_init: ESP-IDF:          v5.4.4[0m
+[0;32mI (445) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (449) efuse_init: Max chip rev:     v3.99 [0m
+[0;32mI (453) efuse_init: Chip rev:         v3.0[0m
+[0;32mI (457) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (463) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM[0m
+[0;32mI (468) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM[0m
+[0;32mI (473) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM[0m
+[0;32mI (478) heap_init: At 3FFD3880 len 0000C780 (49 KiB): DRAM[0m
+[0;32mI (483) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM[0m
+[0;32mI (489) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM[0m
+[0;32mI (494) heap_init: At 4009DA24 len 000025DC (9 KiB): IRAM[0m
+[0;32mI (501) spi_flash: detected chip: generic[0m
+[0;32mI (503) spi_flash: flash io: dio[0m
+[0;33mW (506) spi_flash: Detected size(16384k) larger than the size in the binary image header(2048k). Using the size in the binary image header.[0m
+[0;32mI (519) coexist: coex firmware version: 2de0784[0m
+[0;32mI (523) main_task: Started on CPU0[0m
+[0;32mI (526) main_task: Calling app_main()[0m
+[0;32mI (541) uart: queue free spaces: 10[0m
+[0;32mI (546) wifi:wifi driver task: 3ffdbfb4, prio:23, stack:6656, core=0[0m
+[0;32mI (551) wifi:wifi firmware version: 8896d66[0m
+[0;32mI (553) wifi:wifi certification version: v7.0[0m
+[0;32mI (553) wifi:config NVS flash: enabled[0m
+[0;32mI (554) wifi:config nano formatting: disabled[0m
+[0;32mI (563) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (564) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (565) wifi:Init management short buffer num: 32[0m
+[0;32mI (574) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (575) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (576) wifi:Init static rx buffer num: 10[0m
+[0;32mI (585) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (587) wifi_init: rx ba win: 6[0m
+[0;32mI (588) wifi_init: accept mbox: 6[0m
+[0;32mI (596) wifi_init: tcpip mbox: 32[0m
+[0;32mI (596) wifi_init: udp mbox: 6[0m
+[0;32mI (597) wifi_init: tcp mbox: 6[0m
+[0;32mI (597) wifi_init: tcp tx win: 4096[0m
+[0;32mI (607) wifi_init: tcp rx win: 4096[0m
+[0;32mI (608) wifi_init: tcp mss: 1200[0m
+[0;32mI (608) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (618) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (620) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06[0m
+[0;32mI (693) wifi:mode : sta (84:cc:a8:60:fd:84)[0m
+[0;32mI (695) wifi:enable tsf[0m
+[0;32mI (699) pan_bridge: [STATE] WAIT_BT -> NO_WIFI[0m
+[0;32mI (702) pan_bridge: [DNS] task started[0m
+[0;32mI (708) BTDM_INIT: BT controller compile version [440e0f9][0m
+[0;32mI (710) BTDM_INIT: Using main XTAL as clock source[0m
+[0;32mI (712) BTDM_INIT: Bluetooth MAC: 84:cc:a8:60:fd:86[0m
+Local version information:
+- HCI Version    0x0008
+- HCI Revision   0x030e
+- LMP Version    0x0008
+- LMP Subversion 0x030e
+- Manufacturer 0x0060
+Unknown manufacturer / manufacturer not supported yet.
+BTstack up and running at 84:CC:A8:60:FD:86
+[0;32mI (10716) pan_bridge: [HCI] Connection request from 6C:23:B9:55:7E:2D[0m
+[0;32mI (10725) pan_bridge: [HCI] Connection complete status=0x00 addr=6C:23:B9:55:7E:2D[0m
+[0;32mI (13819) pan_bridge: [HCI] Disconnected handle=0x0080 reason=0x13[0m
+[0;32mI (20328) pan_bridge: [HCI] Connection request from 6C:23:B9:55:7E:2D[0m
+[0;32mI (20346) pan_bridge: [HCI] Connection complete status=0x00 addr=6C:23:B9:55:7E:2D[0m
+[0;32mI (20658) pan_bridge: [BT] BNEP channel opened[0m
+[0;32mI (20660) pan_bridge: [BT] hidden[0m
+[0;33mW (40701) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (40704) pan_bridge: [HB] State:NO_WIFI | BT:ON RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:74KB min:70KB | Up:0d 00:00:40[0m
+[0;32mI (43045) pan_bridge: [STATE] NO_WIFI -> WIFI_CONN[0m
+[0;32mI (44998) wifi:new:<11,0>, old:<1,0>, ap:<255,255>, sta:<11,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (45002) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (45012) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (45024) wifi:state: assoc -> run (0x10)[0m
+[0;32mI (45142) wifi:connected with homewifi, aid = 7, channel 11, BW20, bssid = 7c:8b:ca:b3:64:10[0m
+[0;32mI (45145) wifi:security: WPA2-PSK, phy: bgn, rssi: -65, cipher(pairwise:0x3, group:0x3), pmf:0[0m
+[0;32mI (45155) wifi:pm start, type: 1[0m
+
+[0;32mI (45156) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us[0m
+[0;32mI (45182) wifi:<ba-add>idx:0 (ifx:0, 7c:8b:ca:b3:64:10), tid:0, ssn:2, winSize:64[0m
+[0;32mI (45235) wifi:AP's beacon interval = 102400 us, DTIM period = 1[0m
+[0;32mI (46703) esp_netif_handlers: sta ip: 192.168.0.100, mask: 255.255.255.0, gw: 192.168.0.1[0m
+[0;32mI (46707) wifi:Set ps type: 1, coexist: 1[0m
+
+[0;32mI (46708) pan_bridge: [STATE] WIFI_CONN -> BRIDGE_ACTIVE[0m
+[0;32mI (63799) pan_bridge: [HCI] Disconnected handle=0x0081 reason=0x13[0m
+[0;32mI (63802) pan_bridge: [STATE] BRIDGE_ACTIVE -> WAIT_BT[0m
+[0;33mW (63803) pan_bridge: [BTR] create #1 heap=57848[0m
+[0;33mW (63804) pan_bridge: [BTR] started, heap=53392[0m
+[0;32mI (65008) pan_bridge: [BT] visible[0m
+[0;32mI (70708) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-63 | Heap:60KB min:50KB | Up:0d 00:01:10[0m
+[0;32mI (80444) pan_bridge: [HCI] Connection request from DC:B7:2E:A2:9C:8F[0m
+[0;32mI (80487) pan_bridge: [HCI] Connection complete status=0x00 addr=DC:B7:2E:A2:9C:8F[0m
+[0;32mI (83260) pan_bridge: [BT] BNEP channel opened[0m
+[0;32mI (83262) pan_bridge: [BT] hidden[0m
+[0;32mI (83263) pan_bridge: [STATE] WAIT_BT -> BRIDGE_ACTIVE[0m
+[0;32mI (100711) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-100 | WiFi:ON RSSI:-65 | Heap:55KB min:2KB | Up:0d 00:01:40[0m
+[0;32mI (121975) wifi:<ba-add>idx:1 (ifx:0, 7c:8b:ca:b3:64:10), tid:2, ssn:0, winSize:64[0m
+[0;32mI (130712) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-13 | WiFi:ON RSSI:-65 | Heap:34KB min:2KB | Up:0d 00:02:10[0m
+[0;32mI (160715) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-11 | WiFi:ON RSSI:-64 | Heap:48KB min:2KB | Up:0d 00:02:40[0m
+[0;32mI (190719) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-11 | WiFi:ON RSSI:-64 | Heap:20KB min:2KB | Up:0d 00:03:10[0m
+[0;33mW (190720) pan_bridge: [WDT] Low heap: 20724 bytes[0m
+[0;32mI (220722) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-13 | WiFi:ON RSSI:-64 | Heap:18KB min:2KB | Up:0d 00:03:40[0m
+[0;33mW (220723) pan_bridge: [WDT] Low heap: 18992 bytes[0m
+[0;32mI (250725) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-12 | WiFi:ON RSSI:-70 | Heap:14KB min:2KB | Up:0d 00:04:10[0m
+[0;33mW (250727) pan_bridge: [WDT] Low heap: 15348 bytes[0m
+[0;32mI (280730) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-6 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:04:40[0m
+[0;32mI (304179) pan_bridge: [HCI] Disconnected handle=0x0081 reason=0x13[0m
+[0;32mI (304182) pan_bridge: [STATE] BRIDGE_ACTIVE -> WAIT_BT[0m
+[0;33mW (304183) pan_bridge: [BTR] create #2 heap=35296[0m
+[0;33mW (304184) pan_bridge: [BTR] started, heap=30840[0m
+[0;32mI (305388) pan_bridge: [BT] visible[0m
+[0;32mI (310734) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-69 | Heap:38KB min:2KB | Up:0d 00:05:10[0m
+[0;32mI (315020) pan_bridge: [HCI] Connection request from 6C:23:B9:55:7E:2D[0m
+[0;32mI (315026) pan_bridge: [HCI] Connection complete status=0x00 addr=6C:23:B9:55:7E:2D[0m
+[0;32mI (315254) pan_bridge: [BT] BNEP channel opened[0m
+[0;32mI (315256) pan_bridge: [BT] hidden[0m
+[0;32mI (315257) pan_bridge: [STATE] WAIT_BT -> BRIDGE_ACTIVE[0m
+[0;32mI (340735) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-100 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:05:40[0m
+[0;32mI (370739) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-14 | WiFi:ON RSSI:-71 | Heap:31KB min:2KB | Up:0d 00:06:10[0m
+[0;32mI (400742) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-44 | WiFi:ON RSSI:-76 | Heap:34KB min:2KB | Up:0d 00:06:40[0m
+[0;32mI (430743) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-19 | WiFi:ON RSSI:-74 | Heap:34KB min:2KB | Up:0d 00:07:10[0m
+[0;32mI (460747) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-19 | WiFi:ON RSSI:-82 | Heap:33KB min:2KB | Up:0d 00:07:40[0m
+[0;32mI (490749) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-19 | WiFi:ON RSSI:-72 | Heap:34KB min:2KB | Up:0d 00:08:10[0m
+[0;32mI (520753) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-85 | Heap:34KB min:2KB | Up:0d 00:08:40[0m
+[0;32mI (550755) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-73 | Heap:34KB min:2KB | Up:0d 00:09:10[0m
+[0;32mI (580758) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:09:40[0m
+[0;32mI (610760) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:10:10[0m
+[0;32mI (640764) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-71 | Heap:34KB min:2KB | Up:0d 00:10:40[0m
+[0;32mI (670767) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-71 | Heap:34KB min:2KB | Up:0d 00:11:10[0m
+[0;32mI (700769) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:11:40[0m
+[0;32mI (730773) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:12:10[0m
+[0;32mI (760775) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:12:40[0m
+[0;32mI (790779) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:13:10[0m
+[0;32mI (820783) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:13:40[0m
+[0;32mI (850783) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:14:10[0m
+[0;32mI (880785) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:14:40[0m
+[0;32mI (910789) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:15:10[0m
+[0;32mI (940791) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:15:40[0m
+[0;32mI (970794) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:16:10[0m
+[0;32mI (1000796) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:16:40[0m
+[0;32mI (1030800) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:17:10[0m
+[0;32mI (1060803) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:17:40[0m
+[0;32mI (1090805) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:18:10[0m
+[0;32mI (1120809) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:18:40[0m
+[0;32mI (1150811) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:19:10[0m
+[0;32mI (1180814) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:19:40[0m
+[0;32mI (1210816) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:20:10[0m
+[0;32mI (1240819) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:20:40[0m
+[0;32mI (1270821) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:21:10[0m
+[0;32mI (1300824) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:21:40[0m
+[0;32mI (1330826) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:22:10[0m
+[0;32mI (1360829) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:22:40[0m
+[0;32mI (1390831) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-16 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:23:10[0m
+[0;32mI (1420834) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-29 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:23:40[0m
+[0;32mI (1450838) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-23 | WiFi:ON RSSI:-71 | Heap:34KB min:2KB | Up:0d 00:24:10[0m
+[0;32mI (1480842) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-23 | WiFi:ON RSSI:-67 | Heap:34KB min:2KB | Up:0d 00:24:40[0m
+[0;32mI (1510845) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-24 | WiFi:ON RSSI:-67 | Heap:34KB min:2KB | Up:0d 00:25:10[0m
+[0;32mI (1540847) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-23 | WiFi:ON RSSI:-67 | Heap:34KB min:2KB | Up:0d 00:25:40[0m
+[0;32mI (1570851) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-23 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:26:10[0m
+[0;32mI (1600853) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-23 | WiFi:ON RSSI:-67 | Heap:34KB min:2KB | Up:0d 00:26:40[0m
+[0;32mI (1630857) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-21 | WiFi:ON RSSI:-68 | Heap:34KB min:2KB | Up:0d 00:27:10[0m
+[0;32mI (1660861) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-22 | WiFi:ON RSSI:-71 | Heap:34KB min:2KB | Up:0d 00:27:40[0m
+[0;32mI (1690863) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-22 | WiFi:ON RSSI:-69 | Heap:34KB min:2KB | Up:0d 00:28:10[0m
+[0;32mI (1720867) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-22 | WiFi:ON RSSI:-70 | Heap:34KB min:2KB | Up:0d 00:28:40[0m

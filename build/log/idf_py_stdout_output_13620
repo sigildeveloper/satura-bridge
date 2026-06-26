@@ -1,0 +1,140 @@
+[0;32mI (13) boot: ESP-IDF v5.4.4 2nd stage bootloader[0m
+[0;32mI (13) boot: compile time Jun 25 2026 10:52:26[0m
+[0;32mI (13) boot: Multicore bootloader[0m
+[0;32mI (14) boot: chip revision: v3.0[0m
+[0;32mI (16) boot.esp32: SPI Speed      : 40MHz[0m
+[0;32mI (20) boot.esp32: SPI Mode       : DIO[0m
+[0;32mI (24) boot.esp32: SPI Flash Size : 2MB[0m
+[0;32mI (27) boot: Enabling RNG early entropy source...[0m
+[0;32mI (32) boot: Partition Table:[0m
+[0;32mI (34) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (41) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (47) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (54) boot:  2 factory          factory app      00 00 00010000 00177000[0m
+[0;32mI (60) boot: End of partition table[0m
+[0;32mI (63) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=20cd8h (134360) map[0m
+[0;32mI (117) esp_image: segment 1: paddr=00030d00 vaddr=3ffbdb60 size=05c04h ( 23556) load[0m
+[0;32mI (126) esp_image: segment 2: paddr=0003690c vaddr=40080000 size=0970ch ( 38668) load[0m
+[0;32mI (141) esp_image: segment 3: paddr=00040020 vaddr=400d0020 size=96afch (617212) map[0m
+[0;32mI (352) esp_image: segment 4: paddr=000d6b24 vaddr=4008970c size=14318h ( 82712) load[0m
+[0;32mI (384) esp_image: segment 5: paddr=000eae44 vaddr=50000000 size=0001ch (    28) load[0m
+[0;32mI (399) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (399) boot: Disabling RNG early entropy source...[0m
+[0;32mI (410) cpu_start: Multicore app[0m
+[0;32mI (418) cpu_start: GPIO 3 and 1 are used as console UART I/O pins[0m
+[0;32mI (418) cpu_start: Pro cpu start user code[0m
+[0;32mI (418) cpu_start: cpu freq: 240000000 Hz[0m
+[0;32mI (420) app_init: Application information:[0m
+[0;32mI (424) app_init: Project name:     satura-bridge[0m
+[0;32mI (428) app_init: App version:      1[0m
+[0;32mI (432) app_init: Compile time:     Jun 25 2026 10:52:13[0m
+[0;32mI (437) app_init: ELF file SHA256:  e2dfb7cd1...[0m
+[0;32mI (441) app_init: ESP-IDF:          v5.4.4[0m
+[0;32mI (445) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (449) efuse_init: Max chip rev:     v3.99 [0m
+[0;32mI (453) efuse_init: Chip rev:         v3.0[0m
+[0;32mI (457) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (463) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM[0m
+[0;32mI (468) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM[0m
+[0;32mI (473) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM[0m
+[0;32mI (478) heap_init: At 3FFD3880 len 0000C780 (49 KiB): DRAM[0m
+[0;32mI (483) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM[0m
+[0;32mI (489) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM[0m
+[0;32mI (494) heap_init: At 4009DA24 len 000025DC (9 KiB): IRAM[0m
+[0;32mI (501) spi_flash: detected chip: generic[0m
+[0;32mI (503) spi_flash: flash io: dio[0m
+[0;33mW (506) spi_flash: Detected size(16384k) larger than the size in the binary image header(2048k). Using the size in the binary image header.[0m
+[0;32mI (519) coexist: coex firmware version: 2de0784[0m
+[0;32mI (523) main_task: Started on CPU0[0m
+[0;32mI (526) main_task: Calling app_main()[0m
+[0;32mI (549) uart: queue free spaces: 10[0m
+[0;32mI (554) wifi:wifi driver task: 3ffdc160, prio:23, stack:6656, core=0[0m
+[0;32mI (565) wifi:wifi firmware version: 8896d66[0m
+[0;32mI (566) wifi:wifi certification version: v7.0[0m
+[0;32mI (567) wifi:config NVS flash: enabled[0m
+[0;32mI (567) wifi:config nano formatting: disabled[0m
+[0;32mI (570) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (571) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (571) wifi:Init management short buffer num: 32[0m
+[0;32mI (581) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (582) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (592) wifi:Init static rx buffer num: 10[0m
+[0;32mI (592) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (594) wifi_init: rx ba win: 6[0m
+[0;32mI (602) wifi_init: accept mbox: 6[0m
+[0;32mI (603) wifi_init: tcpip mbox: 32[0m
+[0;32mI (603) wifi_init: udp mbox: 6[0m
+[0;32mI (604) wifi_init: tcp mbox: 6[0m
+[0;32mI (614) wifi_init: tcp tx win: 4096[0m
+[0;32mI (614) wifi_init: tcp rx win: 4096[0m
+[0;32mI (615) wifi_init: tcp mss: 1200[0m
+[0;32mI (615) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (625) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (627) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06[0m
+[0;32mI (696) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(0)[0m
+[0;32mI (709) wifi:mode : sta (84:cc:a8:60:fd:84)[0m
+[0;32mI (711) wifi:enable tsf[0m
+[0;32mI (716) pan_bridge: [APP] credentials loaded, waiting for BT before WiFi[0m
+[0;32mI (719) pan_bridge: [DNS] task started[0m
+[0;32mI (725) BTDM_INIT: BT controller compile version [440e0f9][0m
+[0;32mI (727) BTDM_INIT: Using main XTAL as clock source[0m
+[0;32mI (729) BTDM_INIT: Bluetooth MAC: 84:cc:a8:60:fd:86[0m
+Local version information:
+- HCI Version    0x0008
+- HCI Revision   0x030e
+- LMP Version    0x0008
+- LMP Subversion 0x030e
+- Manufacturer 0x0060
+Unknown manufacturer / manufacturer not supported yet.
+BTstack up and running at 84:CC:A8:60:FD:86
+[0;33mW (40720) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (40722) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:00:40[0m
+[0;33mW (70724) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (70726) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:01:10[0m
+[0;33mW (100727) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (100729) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:01:40[0m
+[0;33mW (130729) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (130731) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:02:10[0m
+[0;33mW (160732) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (160734) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:02:40[0m
+[0;33mW (190734) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (190736) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:03:10[0m
+[0;33mW (220737) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (220739) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:03:40[0m
+[0;33mW (250739) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (250741) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:04:10[0m
+[0;33mW (280742) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (280744) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:04:40[0m
+[0;33mW (310744) wifi:Haven't to connect to a suitable AP now![0m
+[0;32mI (310746) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:OFF RSSI:-100 | Heap:78KB min:77KB | Up:0d 00:05:10[0m
+[0;32mI (335868) pan_bridge: [HCI] Connection request from 6C:23:B9:55:7E:2D[0m
+[0;32mI (335874) pan_bridge: [HCI] Connection complete status=0x00 addr=6C:23:B9:55:7E:2D[0m
+[0;32mI (336107) pan_bridge: [BT] BNEP channel opened[0m
+[0;32mI (336109) pan_bridge: [BT] hidden[0m
+[0;32mI (336112) pan_bridge: [STATE] WAIT_BT -> WIFI_CONN[0m
+[0;32mI (336194) wifi:new:<11,0>, old:<1,0>, ap:<255,255>, sta:<11,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (336198) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (336212) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (336224) wifi:state: assoc -> run (0x10)[0m
+[0;32mI (336340) wifi:connected with homewifi, aid = 7, channel 11, BW20, bssid = 7c:8b:ca:b3:64:10[0m
+[0;32mI (336343) wifi:security: WPA2-PSK, phy: bgn, rssi: -64, cipher(pairwise:0x3, group:0x3), pmf:0[0m
+[0;32mI (336349) wifi:pm start, type: 1[0m
+
+[0;32mI (336350) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us[0m
+[0;32mI (336374) wifi:<ba-add>idx:0 (ifx:0, 7c:8b:ca:b3:64:10), tid:0, ssn:2, winSize:64[0m
+[0;32mI (336394) wifi:AP's beacon interval = 102400 us, DTIM period = 1[0m
+[0;32mI (337969) esp_netif_handlers: sta ip: 192.168.0.100, mask: 255.255.255.0, gw: 192.168.0.1[0m
+[0;32mI (337973) wifi:Set ps type: 1, coexist: 1[0m
+
+[0;32mI (337976) pan_bridge: [STATE] WIFI_CONN -> BRIDGE_ACTIVE[0m
+[0;32mI (340747) pan_bridge: [HB] State:BRIDGE_ACTIVE | BT:ON RSSI:-100 | WiFi:ON RSSI:-62 | Heap:56KB min:55KB | Up:0d 00:05:40[0m
+[0;32mI (364062) pan_bridge: [HCI] Disconnected handle=0x0080 reason=0x13[0m
+[0;32mI (364065) pan_bridge: [STATE] BRIDGE_ACTIVE -> WAIT_BT[0m
+[0;33mW (364066) pan_bridge: [BTR] create #1 heap=57648[0m
+[0;33mW (364067) pan_bridge: [BTR] started, heap=53192[0m
+[0;32mI (365271) pan_bridge: [BT] visible[0m
+[0;32mI (370750) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-62 | Heap:60KB min:51KB | Up:0d 00:06:10[0m
+[0;32mI (400753) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-62 | Heap:60KB min:51KB | Up:0d 00:06:40[0m
+[0;32mI (430755) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-62 | Heap:60KB min:51KB | Up:0d 00:07:10[0m
+[0;32mI (460757) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-62 | Heap:60KB min:51KB | Up:0d 00:07:40[0m
+[0;32mI (490759) pan_bridge: [HB] State:WAIT_BT | BT:OFF RSSI:-100 | WiFi:ON RSSI:-62 | Heap:60KB min:51KB | Up:0d 00:08:10[0m
