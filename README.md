@@ -10,7 +10,7 @@
 
 ## Why
 
-2G and 3G networks are being shut down worldwide. Most retro phones — Nokia S60, Sony Ericsson, and others — have Bluetooth but no WiFi. When carriers switch off 2G, these phones permanently lose internet access.
+2G and 3G networks are being shut down worldwide. Most retro phones — Nokia S60, Sony Ericsson, and others — have Bluetooth but no WiFi. When carriers switch off 2/3G, these phones permanently lose internet access.
 
 **Satura Bridge** fixes this. A small ESP32 module (~$5) connects to the phone via Bluetooth and provides internet through WiFi. The phone sees it as a regular Bluetooth PAN connection — no drivers, no special setup on the phone side.
 
