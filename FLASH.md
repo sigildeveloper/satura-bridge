@@ -42,7 +42,7 @@ idf.py flash monitor
 
 1. Enable Bluetooth on your phone
 2. Find **Satura Bridge** and connect
-3. Browser opens automatically (captive portal)
+3. Open any HTTP URL or http://192.168.7.1, there will be the captive portal
 4. Enter your WiFi network name and password
 5. Done — internet is working
 
@@ -96,6 +96,6 @@ idf.py flash monitor
 
 1. На телефоне включи Bluetooth
 2. Найди устройство **Satura Bridge** и подключись
-3. Телефон откроет браузер автоматически (captive portal)
-4. Введи имя и пароль своей WiFi сети
-5. Готово — интернет работает
+3. Открой любой HTTP URL или http://192.168.7.1, откроется страница настройки
+5. Введи имя и пароль своей WiFi сети
+6. Готово — интернет работает
