@@ -142,6 +142,14 @@ Tested on your device? Post in the [chat](https://t.me/nnmidletschat) and we'll 
 
 ---
 
+## Related Projects
+
+- **[Vetera Bridge](https://github.com/arifwn/vetera-bridge)** — PPP over
+  Bluetooth bridge for older S60 v1 devices (N-Gage, etc.) that don't support
+  BT PAN. Uses GnuBox for connection on the phone side.
+
+---
+
 ## License
 
 MIT — do whatever you want, mention the author.
@@ -301,6 +309,14 @@ satura-bridge/
 | J2ME приложения | ✅ Работает |
 
 Если проверил на своём устройстве — пиши в [чат](https://t.me/nnmidletschat)
+
+---
+
+## Похожие проекты
+
+- **[Vetera Bridge](https://github.com/arifwn/vetera-bridge)** — PPP через
+  Bluetooth для старых устройств S60 v1 (N-Gage и др.), у которых нет
+  поддержки BT PAN. На стороне телефона используется GnuBox.
 
 ---
 
