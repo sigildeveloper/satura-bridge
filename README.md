@@ -14,7 +14,7 @@ What is Satura Bridge?
 
 Satura Bridge is a small ESP32-based Bluetooth Classic PAN to Wi-Fi Internet gateway designed to bring legacy mobile phones back online.
 
-Many older phones,including Nokia Symbian devices, Sony Ericsson phones, and other legacy mobile devices, have Bluetooth but no Wi-Fi. As 2G and 3G networks are being shut down in many parts of the world, these devices are increasingly losing access to mobile Internet.
+Many older phones, including Nokia Symbian devices, Sony Ericsson phones, and other legacy mobile devices, have Bluetooth but no Wi-Fi. As 2G and 3G networks are being shut down in many parts of the world, these devices are increasingly losing access to mobile Internet.
 
 Satura Bridge provides an alternative: the phone connects to the ESP32 over Bluetooth PAN, while the ESP32 uses a modern Wi-Fi network as its upstream Internet connection.
 
@@ -41,9 +41,9 @@ The phone sees a regular Bluetooth PAN network connection. No drivers or special
          ▼
       Internet
 
-Satura Bridge is currently focused on Bluetooth PAN / NAP capable devices. Compatibility with individual phones and operating systems may vary and is being tested.
+Satura Bridge is currently focused on devices that support Bluetooth PAN / NAP. Compatibility with individual phones and operating systems may vary and is being tested.
 
-«Note: Satura Bridge does not currently work for providing internet connection on Windows 10. Older Android devices have been tested successfully. Some PDAs and other Bluetooth Classic devices may also work.»
+«Note: Satura Bridge does not currently work for providing an Internet connection to Windows 10 devices. Older Android devices have been tested successfully. Some PDAs and other Bluetooth Classic devices may also work.»
 
 ---
 
@@ -179,7 +179,7 @@ Roadmap
 - [ ] Test more Sony Ericsson devices
 - [ ] Improve compatibility with older phones
 - [ ] Improve Bluetooth / Wi-Fi coexistence
-- [ ] Develop a compact custom PCB for two ESP32 modules onboard
+- [ ] Develop a compact custom PCB with two ESP32 modules onboard
 - [ ] Explore Ethernet connectivity
 
 ---
@@ -217,7 +217,7 @@ Related Projects
 
 Vetera Bridge
 
-"Vetera Bridge" (https://github.com/arifwn/vetera-bridge) is a project that provides Internet connectivity over Bluetooth PPP for older S60v1 devices, including devices such as the Nokia N-Gage, that do not support Bluetooth PAN.
+"Vetera Bridge" (https://github.com/arifwn/vetera-bridge) is a project that provides Internet connectivity over Bluetooth PPP for older S60 v1 devices, including devices such as the Nokia N-Gage, that do not support Bluetooth PAN.
 
 It uses GnuBox on the phone side.
 
@@ -227,11 +227,11 @@ Satura Bridge and Vetera Bridge target different generations and networking capa
 
 License
 
-Satura Bridge is released under the MIT License.
+Satura Bridge is released under the "MIT License" (LICENSE).
 
 Do whatever you want with the project, but please keep the original attribution.
 
-BTstack in "components/btstack/" is distributed under its own license. See "components/btstack/LICENSE".
+BTstack in "components/btstack/" is distributed under its own license. See ""components/btstack/LICENSE"" (components/btstack/LICENSE).
 
 ---
 
@@ -257,7 +257,7 @@ Satura Bridge — Bluetooth PAN → Wi-Fi шлюз для старых моби�
 
 Satura Bridge — небольшой шлюз на базе ESP32, который позволяет старым мобильным телефонам выходить в интернет через Bluetooth, используя современную Wi-Fi сеть в качестве подключения к интернету.
 
-Многие старые телефоны,включая Nokia, Sony Ericsson и другие устройства, имеют Bluetooth, но не имеют Wi-Fi. При этом 2G и 3G сети во многих странах постепенно отключаются, и такие устройства теряют возможность пользоваться мобильным интернетом.
+Многие старые телефоны, включая Nokia, Sony Ericsson и другие устройства, имеют Bluetooth, но не имеют Wi-Fi. При этом 2G и 3G сети во многих странах постепенно отключаются, и такие устройства теряют возможность пользоваться мобильным интернетом.
 
 Satura Bridge предлагает альтернативу: телефон подключается к ESP32 по Bluetooth PAN, а ESP32 подключается к роутеру по Wi-Fi.
 
@@ -278,7 +278,7 @@ Satura Bridge предлагает альтернативу: телефон по
          │ Wi-Fi
          ▼
 ┌──────────────────┐
-│      Роутер       │
+│      Роутер      │
 └────────┬─────────┘
          │
          ▼
@@ -286,7 +286,7 @@ Satura Bridge предлагает альтернативу: телефон по
 
 Satura Bridge в первую очередь рассчитан на устройства с поддержкой Bluetooth PAN / NAP. Совместимость с конкретными телефонами и версиями ОС может различаться и сейчас активно тестируется.
 
-«Важно: в текущей версии Satura Bridge не работает для подключения Windows 10. Старые Android-устройства были успешно протестированы. Некоторые КПК и другие устройства с Bluetooth Classic также могут работать.»
+«Важно: в текущей версии Satura Bridge не работает для предоставления интернет-соединения устройствам под управлением Windows 10. Старые Android-устройства были успешно протестированы. Некоторые КПК и другие устройства с Bluetooth Classic также могут работать.»
 
 ---
 
@@ -327,7 +327,7 @@ Satura Bridge в первую очередь рассчитан на устро�
 
 1. Прошить ESP32
 
-Смотри "FLASH.md" (FLASH.md), там есть инструкция по прошивке.
+Смотри "FLASH.md" (FLASH.md) — там есть инструкция по прошивке.
 
 Также доступен вариант прошивки прямо через браузер без установки дополнительного программного обеспечения.
 
@@ -460,7 +460,7 @@ satura-bridge/
 
 Vetera Bridge
 
-"Vetera Bridge" (https://github.com/arifwn/vetera-bridge) — проект, который обеспечивает доступ к интернету через Bluetooth PPP для старых устройств S60 v1, включая Nokia N-Gage и другие аппараты, не поддерживающие Bluetooth PAN.
+"Vetera Bridge" (https://github.com/arifwn/vetera-bridge) — отдельный проект, который обеспечивает доступ к интернету через Bluetooth PPP для старых устройств S60 v1, включая Nokia N-Gage и другие аппараты, не поддерживающие Bluetooth PAN.
 
 На стороне телефона используется GnuBox.
 
@@ -470,11 +470,11 @@ Satura Bridge и Vetera Bridge рассчитаны на разные покол
 
 Лицензия
 
-Satura Bridge распространяется под лицензией MIT.
+Satura Bridge распространяется под "лицензией MIT" (LICENSE).
 
 Делайте с проектом что хотите, но, пожалуйста, сохраняйте указание авторства.
 
-BTstack в "components/btstack/" распространяется под собственной лицензией. См. "components/btstack/LICENSE".
+BTstack в "components/btstack/" распространяется под собственной лицензией. См. ""components/btstack/LICENSE"" (components/btstack/LICENSE).
 
 ---
 
