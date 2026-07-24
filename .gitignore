@@ -1,8 +1,18 @@
 # ESP-IDF build artifacts
-build/
-.cache/
 sdkconfig
 sdkconfig.old
+build/
+dependencies.lock
+*.bin
+*.elf
+*.map
+*.o
+*.a
+*.so
+*.d
+*.gcno
+*.gcda
+*.gcov
 
 # IDE
 .vscode/
