@@ -225,7 +225,7 @@ satura-bridge/
 
 ## Related Projects
 
-### Vetera Bridge
+### [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
 
 Vetera Bridge is a project that provides Internet connectivity over Bluetooth PPP for older S60 v1 devices, including devices such as the Nokia N-Gage, that do not support Bluetooth PAN.
 
@@ -478,7 +478,7 @@ satura-bridge/
 
 ## Похожие проекты
 
-### Vetera Bridge
+### [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
 
 Vetera Bridge — отдельный проект, который обеспечивает доступ к интернету через Bluetooth PPP для старых устройств S60 v1, включая Nokia N-Gage и другие аппараты, не поддерживающие Bluetooth PAN.
 
