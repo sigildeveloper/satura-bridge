@@ -1,101 +1,193 @@
-# Flashing (English)
+Flashing / Прошивка
 
-## Option 1 — Online, no software needed (recommended)
+Flashing (English)
 
-1. Open in Chrome or Edge: **https://esp.huhn.me**
-2. Connect ESP32 via USB
-3. Click **Connect** → select your device port
-4. Click **Add File**, select `firmware/satura_bridge_v0.0.9.bin`
-5. Set address to **0x0**
-6. Click **Program**
-7. After flashing click **Reset**
+Option 1 — Online, no software required (recommended)
 
-> Chrome / Edge only. Firefox does not support WebSerial.
+The easiest way to flash Satura Bridge is using the browser-based ESP Web Tools flasher.
+
+1. Open "https://esp.huhn.me" (https://esp.huhn.me) in Google Chrome or Microsoft Edge.
+
+2. Connect your ESP32 board to your computer via USB.
+
+3. Click Connect and select your ESP32's serial port.
+
+4. Click Add File.
+
+5. Select:
+   
+   "firmware/satura_bridge_v0.0.9.bin"
+
+6. Set the flash address to:
+   
+   "0x0"
+
+7. Click Program.
+
+8. After flashing is complete, click Reset on the device.
+
+«Note: The browser flasher requires Web Serial support. Google Chrome and Microsoft Edge are recommended. Firefox does not support Web Serial.»
 
 ---
 
-## Option 2 — esptool (Python)
+Option 2 — esptool (Python)
 
-```bash
+Install "esptool":
+
 pip install esptool
+
+Flash the firmware:
+
+esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura_bridge_v0.0.9.bin
+
+Replace "COM3" with the serial port of your ESP32.
+
+Examples:
+
+- Windows: "COM3"
+- Linux: "/dev/ttyUSB0"
+- macOS: "/dev/cu.usbserial-XXXX"
+
+If your version of "esptool" uses the older command syntax, use:
+
 esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura_bridge_v0.0.9.bin
-```
-
-Replace `COM3` with your port (`/dev/ttyUSB0` on Linux/Mac).
 
 ---
 
-## Option 3 — Build from source
+Option 3 — Build from source
 
-Requires: ESP-IDF v5.4.x
+Requires ESP-IDF v5.4.x.
 
-```bash
-git clone --recursive https://github.com/YOUR_USERNAME/satura-bridge
+Clone the repository:
+
+git clone --recursive https://github.com/sigildeveloper/satura-bridge
 cd satura-bridge
+
+Build the project:
+
 idf.py build
+
+Flash the ESP32 and open the serial monitor:
+
 idf.py flash monitor
-```
 
 ---
 
-## First boot
+First Boot
 
-1. Enable Bluetooth on your phone
-2. Find **Satura Bridge** and connect
-3. Open any HTTP URL or http://192.168.7.1, there will be the captive portal
-4. Enter your WiFi network name and password
-5. Done — internet is working
+After flashing:
 
+1. Enable Bluetooth on your phone.
 
----
+2. Find Satura Bridge in the Bluetooth device list.
 
----
+3. Pair/connect to Satura Bridge.
 
+4. Open any HTTP URL in your phone's browser, or directly open:
+   
+   "http://192.168.7.1"
 
-# Прошивка / Flashing
+5. The Satura Bridge setup page should appear.
 
-## Способ 1 — Онлайн, без установки софта (рекомендуется)
+6. Enter your Wi-Fi network name and password.
 
-1. Открой в Chrome или Edge: **https://esp.huhn.me**
-2. Подключи ESP32 по USB
-3. Нажми **Connect** → выбери порт устройства
-4. Нажми **Add File**, выбери `firmware/satura_bridge_v0.0.9.bin`
-5. Адрес укажи **0x0**
-6. Нажми **Program**
-7. После прошивки нажми **Reset**
+7. Save the settings.
 
-> Работает только в Chrome / Edge. Firefox не поддерживает WebSerial.
+Satura Bridge will connect to the configured Wi-Fi network and provide Internet access to the connected phone over Bluetooth PAN.
 
 ---
 
-## Способ 2 — esptool (Python)
+Прошивка
 
-```bash
+Способ 1 — Онлайн, без установки дополнительного ПО (рекомендуется)
+
+Самый простой способ прошить Satura Bridge — использовать веб-прошивальщик ESP Web Tools.
+
+1. Откройте "https://esp.huhn.me" (https://esp.huhn.me) в Google Chrome или Microsoft Edge.
+
+2. Подключите ESP32 к компьютеру по USB.
+
+3. Нажмите Connect и выберите последовательный порт ESP32.
+
+4. Нажмите Add File.
+
+5. Выберите файл:
+   
+   "firmware/satura_bridge_v0.0.9.bin"
+
+6. Укажите адрес прошивки:
+   
+   "0x0"
+
+7. Нажмите Program.
+
+8. После завершения прошивки нажмите Reset на устройстве.
+
+«Важно: Веб-прошивальщик требует поддержки Web Serial. Рекомендуется использовать Google Chrome или Microsoft Edge. Firefox не поддерживает Web Serial.»
+
+---
+
+Способ 2 — esptool (Python)
+
+Установите "esptool":
+
 pip install esptool
+
+Прошейте устройство:
+
+esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura_bridge_v0.0.9.bin
+
+Замените "COM3" на последовательный порт вашего ESP32.
+
+Примеры:
+
+- Windows: "COM3"
+- Linux: "/dev/ttyUSB0"
+- macOS: "/dev/cu.usbserial-XXXX"
+
+Если используется старая версия "esptool", может потребоваться старый синтаксис:
+
 esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura_bridge_v0.0.9.bin
-```
-
-Замени `COM3` на свой порт (`/dev/ttyUSB0` на Linux/Mac).
 
 ---
 
-## Способ 3 — Сборка из исходников
+Способ 3 — Сборка из исходников
 
-Требуется: ESP-IDF v5.4.x
+Требуется ESP-IDF v5.4.x.
 
-```bash
-git clone --recursive https://github.com/YOUR_USERNAME/satura-bridge
+Клонируйте репозиторий:
+
+git clone --recursive https://github.com/sigildeveloper/satura-bridge
 cd satura-bridge
+
+Соберите проект:
+
 idf.py build
+
+Прошейте ESP32 и откройте монитор последовательного порта:
+
 idf.py flash monitor
-```
 
 ---
 
-## После прошивки
+Первый запуск
 
-1. На телефоне включи Bluetooth
-2. Найди устройство **Satura Bridge** и подключись
-3. Открой любой HTTP URL или http://192.168.7.1, откроется страница настройки
-5. Введи имя и пароль своей WiFi сети
-6. Готово — интернет работает
+После прошивки:
+
+1. Включите Bluetooth на телефоне.
+
+2. Найдите Satura Bridge в списке Bluetooth-устройств.
+
+3. Выполните сопряжение и подключитесь к Satura Bridge.
+
+4. Откройте любую HTTP-страницу в браузере телефона или непосредственно перейдите по адресу:
+   
+   "http://192.168.7.1"
+
+5. Должна открыться страница настройки Satura Bridge.
+
+6. Введите имя и пароль вашей Wi-Fi сети.
+
+7. Сохраните настройки.
+
+Satura Bridge подключится к указанной Wi-Fi сети и предоставит подключённому телефону доступ в интернет через Bluetooth PAN.
