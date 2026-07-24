@@ -1,16 +1,16 @@
-Satura Bridge
+# Satura Bridge
 
-«Bringing old phones back online.»
+**«Bringing old phones back online.»**
 
 Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
 
-""License" (https://img.shields.io/badge/license-MIT-blue.svg)" (LICENSE)
-""Version" (https://img.shields.io/badge/version-v0.0.9-green.svg)" (firmware/)
-""Community" (https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)" (https://t.me/nnmidletschat)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-v0.0.9-green.svg)](firmware/)
+[![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
 
-What is Satura Bridge?
+## What is Satura Bridge?
 
 Satura Bridge is a small ESP32-based Bluetooth Classic PAN to Wi-Fi Internet gateway designed to bring legacy mobile phones back online.
 
@@ -20,34 +20,38 @@ Satura Bridge provides an alternative: the phone connects to the ESP32 over Blue
 
 The phone sees a regular Bluetooth PAN network connection. No drivers or special software are required on the phone side, provided that the device supports the required Bluetooth networking profile.
 
+```
+
 ┌──────────────────┐
 │   Legacy phone   │
 │  Nokia / Symbian │
 └────────┬─────────┘
-         │
-         │ Bluetooth Classic / PAN
-         ▼
+│
+│ Bluetooth Classic / PAN
+▼
 ┌──────────────────┐
 │  Satura Bridge   │
 │      ESP32       │
 └────────┬─────────┘
-         │
-         │ Wi-Fi
-         ▼
+│
+│ Wi-Fi
+▼
 ┌──────────────────┐
 │      Router      │
 └────────┬─────────┘
-         │
-         ▼
-      Internet
+│
+▼
+Internet
+
+```
 
 Satura Bridge is currently focused on devices that support Bluetooth PAN / NAP. Compatibility with individual phones and operating systems may vary and is being tested.
 
-«Note: Satura Bridge does not currently work for providing an Internet connection to Windows 10 devices. Older Android devices have been tested successfully. Some PDAs and other Bluetooth Classic devices may also work.»
+> **Note:** Satura Bridge does not currently work for providing an Internet connection to Windows 10 devices. Older Android devices have been tested successfully. Some PDAs and other Bluetooth Classic devices may also work.
 
 ---
 
-Features
+## Features
 
 - Bluetooth Classic networking
 - Bluetooth PAN / NAP support
@@ -63,40 +67,41 @@ Features
 
 ---
 
-Hardware
+## Hardware
 
-Component| Recommended| Minimum
-Board| M5Stack Core2| ESP32-WROOM-32
-Power| USB-C power bank| Any USB 5V supply
-Case| Built into M5Stack Core2| —
+| Component      | Recommended          | Minimum          |
+|----------------|----------------------|------------------|
+| Board          | M5Stack Core2        | ESP32-WROOM-32   |
+| Power          | USB-C power bank     | Any USB 5V supply|
+| Case           | Built into M5Stack Core2 | —             |
 
 Satura Bridge requires an ESP32 variant with Bluetooth Classic support.
 
 The current development hardware uses an ESP32-D0WDQ6-V3.
 
-«Important: An ESP32 board with an external antenna generally provides significantly better range and reliability than a board with a small onboard antenna. Bluetooth and Wi-Fi operate simultaneously and share the ESP32's RF resources, so antenna placement and overall RF design can affect performance.»
+> **Important:** An ESP32 board with an external antenna generally provides significantly better range and reliability than a board with a small onboard antenna. Bluetooth and Wi-Fi operate simultaneously and share the ESP32's RF resources, so antenna placement and overall RF design can affect performance.
 
 A custom hardware revision may be developed in the future.
 
 ---
 
-Quick Start
+## Quick Start
 
-1. Flash the ESP32
+### 1. Flash the ESP32
 
-See "FLASH.md" (FLASH.md) for flashing instructions.
+See [FLASH.md](FLASH.md) for flashing instructions.
 
 A browser-based flashing option is also available, so no additional software installation is required.
 
-2. Connect your phone
+### 2. Connect your phone
 
 1. Enable Bluetooth on your phone.
-2. Find Satura Bridge in the Bluetooth device list.
-3. Pair/connect to it. If a PIN is requested, use "0000".
+2. Find **Satura Bridge** in the Bluetooth device list.
+3. Pair/connect to it. If a PIN is requested, use `0000`.
 4. Open the phone's web browser.
-5. Navigate to any "http://" page, or open "http://192.168.7.1" directly.
+5. Navigate to any `http://` page, or open `http://192.168.7.1` directly.
 
-3. Configure Wi-Fi
+### 3. Configure Wi-Fi
 
 Enter your Wi-Fi network name and password in the setup page.
 
@@ -104,30 +109,32 @@ The settings are stored in flash memory. On subsequent boots, Satura Bridge will
 
 ---
 
-Web Interface
+## Web Interface
 
 The web interface is available at:
 
-http://192.168.7.1
+**http://192.168.7.1**
 
 It can be accessed while a phone is connected to Satura Bridge over Bluetooth.
 
-Page| Description
-"/"| Status, RSSI, uptime, heap information
-"/setup"| Configure Wi-Fi
-"/reset"| Forget the saved Wi-Fi network
-"/reboot"| Reboot the device
+| Page      | Description                                      |
+|-----------|--------------------------------------------------|
+| `/`       | Status, RSSI, uptime, heap information           |
+| `/setup`  | Configure Wi-Fi                                  |
+| `/reset`  | Forget the saved Wi-Fi network                   |
+| `/reboot` | Reboot the device                                |
 
 ---
 
-Performance
+## Performance
 
-Parameter| Value
-Download| ~0.15–0.20 Mbit/s
-Upload| ~0.20–0.27 Mbit/s
-Ping| 150–200 ms
-Maximum clients| 1
-Power draw| ~200 mA from USB
+| Parameter       | Value            |
+|-----------------|------------------|
+| Download        | ~0.15–0.20 Mbit/s|
+| Upload          | ~0.20–0.27 Mbit/s|
+| Ping            | 150–200 ms       |
+| Maximum clients | 1                |
+| Power draw      | ~200 mA from USB |
 
 Measured under normal conditions.
 
@@ -139,21 +146,22 @@ For retro browsers, lightweight web pages, messaging, and similar tasks, the ava
 
 ---
 
-Compatibility
+## Compatibility
 
 Satura Bridge is primarily intended for legacy mobile phones and other devices that support Bluetooth Classic networking.
 
-Tested
+### Tested
 
-Device / Platform| Result
-Sony Ericsson J108| Tested
-Older Android devices| ✅ Working
-NetFront 3.4| ✅ Working
-J2ME applications| ✅ Working
+| Device / Platform        | Result          |
+|--------------------------|-----------------|
+| Sony Ericsson J108       | Tested          |
+| Older Android devices    | ✅ Working      |
+| NetFront 3.4             | ✅ Working      |
+| J2ME applications        | ✅ Working      |
 
 Compatibility with individual devices may vary depending on their Bluetooth PAN implementation and operating system.
 
-If you test Satura Bridge on a device that is not listed here, please share the result in the "community chat" (https://t.me/nnmidletschat).
+If you test Satura Bridge on a device that is not listed here, please share the result in the [community chat](https://t.me/nnmidletschat).
 
 Useful information to include:
 
@@ -166,7 +174,7 @@ Useful information to include:
 
 ---
 
-Roadmap
+## Roadmap
 
 - [x] Bluetooth Classic PAN
 - [x] Wi-Fi Internet connectivity
@@ -184,21 +192,24 @@ Roadmap
 
 ---
 
-Building from Source
+## Building from Source
 
-Requires "ESP-IDF v5.4.x" (https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
+Requires [ESP-IDF v5.4.x](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
 
+```bash
 git clone --recursive https://github.com/sigildeveloper/satura-bridge
 cd satura-bridge
 idf.py build
 idf.py flash monitor
+```
 
-Components are pulled automatically via "idf_component.yml".
+Components are pulled automatically via idf_component.yml.
 
 ---
 
 Project Structure
 
+```
 satura-bridge/
 ├── main/
 │   ├── pan_wifi_bridge.c   # Core gateway logic
@@ -210,6 +221,7 @@ satura-bridge/
 ├── sdkconfig.defaults      # Build configuration
 ├── FLASH.md                # Flashing instructions
 └── README.md
+```
 
 ---
 
@@ -217,7 +229,7 @@ Related Projects
 
 Vetera Bridge
 
-"Vetera Bridge" (https://github.com/arifwn/vetera-bridge) is a project that provides Internet connectivity over Bluetooth PPP for older S60 v1 devices, including devices such as the Nokia N-Gage, that do not support Bluetooth PAN.
+Vetera Bridge is a project that provides Internet connectivity over Bluetooth PPP for older S60 v1 devices, including devices such as the Nokia N-Gage, that do not support Bluetooth PAN.
 
 It uses GnuBox on the phone side.
 
@@ -227,11 +239,11 @@ Satura Bridge and Vetera Bridge target different generations and networking capa
 
 License
 
-Satura Bridge is released under the "MIT License" (LICENSE).
+Satura Bridge is released under the MIT License.
 
 Do whatever you want with the project, but please keep the original attribution.
 
-BTstack in "components/btstack/" is distributed under its own license. See ""components/btstack/LICENSE"" (components/btstack/LICENSE).
+BTstack in components/btstack/ is distributed under its own license. See components/btstack/LICENSE.
 
 ---
 
@@ -239,7 +251,7 @@ Author & Community
 
 Author: @sigdev
 
-Community: "Telegram — @nnmidletschat" (https://t.me/nnmidletschat)
+Community: Telegram — @nnmidletschat
 
 Retro phones • Symbian • J2ME • Bluetooth networking
 
@@ -263,6 +275,7 @@ Satura Bridge предлагает альтернативу: телефон по
 
 Для телефона это выглядит как обычное Bluetooth PAN-соединение. Никаких драйверов или специального программного обеспечения на стороне телефона не требуется, если устройство поддерживает необходимый Bluetooth-профиль.
 
+```
 ┌──────────────────┐
 │  Старый телефон  │
 │  Nokia / Symbian │
@@ -283,41 +296,42 @@ Satura Bridge предлагает альтернативу: телефон по
          │
          ▼
       Интернет
+```
 
 Satura Bridge в первую очередь рассчитан на устройства с поддержкой Bluetooth PAN / NAP. Совместимость с конкретными телефонами и версиями ОС может различаться и сейчас активно тестируется.
 
-«Важно: в текущей версии Satura Bridge не работает для предоставления интернет-соединения устройствам под управлением Windows 10. Старые Android-устройства были успешно протестированы. Некоторые КПК и другие устройства с Bluetooth Classic также могут работать.»
+Важно: в текущей версии Satura Bridge не работает для предоставления интернет-соединения устройствам под управлением Windows 10. Старые Android-устройства были успешно протестированы. Некоторые КПК и другие устройства с Bluetooth Classic также могут работать.
 
 ---
 
 Возможности
 
-- Bluetooth Classic
-- Bluetooth PAN / NAP
-- Wi-Fi в качестве подключения к интернету
-- NAT / маршрутизация между Bluetooth и Wi-Fi
-- Веб-интерфейс настройки
-- Captive portal для первоначальной настройки
-- Автоматическое подключение к сохранённой Wi-Fi сети после включения
-- Автоматическое восстановление соединения
-- Watchdog, способный перезапускать зависшие компоненты без полной перезагрузки устройства
-- Прошивка одним файлом
-- Ориентация на старые мобильные телефоны и устройства Symbian
+· Bluetooth Classic
+· Bluetooth PAN / NAP
+· Wi-Fi в качестве подключения к интернету
+· NAT / маршрутизация между Bluetooth и Wi-Fi
+· Веб-интерфейс настройки
+· Captive portal для первоначальной настройки
+· Автоматическое подключение к сохранённой Wi-Fi сети после включения
+· Автоматическое восстановление соединения
+· Watchdog, способный перезапускать зависшие компоненты без полной перезагрузки устройства
+· Прошивка одним файлом
+· Ориентация на старые мобильные телефоны и устройства Symbian
 
 ---
 
 Железо
 
-Компонент| Рекомендуемый вариант| Минимальный вариант
-Плата| M5Stack Core2| ESP32-WROOM-32
-Питание| USB-C повербанк| Любой источник USB 5V
-Корпус| Встроенный корпус M5Stack Core2| —
+Компонент Рекомендуемый вариант Минимальный вариант
+Плата M5Stack Core2 ESP32-WROOM-32
+Питание USB-C повербанк Любой источник USB 5V
+Корпус Встроенный корпус M5Stack Core2 —
 
 Для работы Satura Bridge требуется ESP32 с поддержкой Bluetooth Classic.
 
 Текущее тестовое устройство использует ESP32-D0WDQ6-V3.
 
-«Важно: ESP32 с внешней антенной обычно обеспечивает значительно лучшую дальность и стабильность соединения по сравнению с платами с небольшой встроенной антенной. Bluetooth и Wi-Fi работают одновременно и используют общие радиочастотные ресурсы ESP32, поэтому расположение антенны и качество RF-разводки могут заметно влиять на результат.»
+Важно: ESP32 с внешней антенной обычно обеспечивает значительно лучшую дальность и стабильность соединения по сравнению с платами с небольшой встроенной антенной. Bluetooth и Wi-Fi работают одновременно и используют общие радиочастотные ресурсы ESP32, поэтому расположение антенны и качество RF-разводки могут заметно влиять на результат.
 
 В будущем планируется разработка собственной компактной платы.
 
@@ -327,7 +341,7 @@ Satura Bridge в первую очередь рассчитан на устро�
 
 1. Прошить ESP32
 
-Смотри "FLASH.md" (FLASH.md) — там есть инструкция по прошивке.
+Смотри FLASH.md — там есть инструкция по прошивке.
 
 Также доступен вариант прошивки прямо через браузер без установки дополнительного программного обеспечения.
 
@@ -335,9 +349,9 @@ Satura Bridge в первую очередь рассчитан на устро�
 
 1. Включите Bluetooth на телефоне.
 2. Найдите Satura Bridge в списке Bluetooth-устройств.
-3. Выполните сопряжение. Если запрашивается PIN, используйте "0000".
+3. Выполните сопряжение. Если запрашивается PIN, используйте 0000.
 4. Откройте браузер на телефоне.
-5. Перейдите на любую страницу "http://" или непосредственно на "http://192.168.7.1".
+5. Перейдите на любую страницу http:// или непосредственно на http://192.168.7.1.
 
 3. Настроить Wi-Fi
 
@@ -355,22 +369,22 @@ http://192.168.7.1
 
 Он доступен, пока телефон подключён к Satura Bridge по Bluetooth.
 
-Страница| Описание
-"/"| Статус, RSSI, время работы, информация о heap
-"/setup"| Настройка Wi-Fi
-"/reset"| Удаление сохранённой Wi-Fi сети
-"/reboot"| Перезагрузка устройства
+Страница Описание
+/ Статус, RSSI, время работы, информация о heap
+/setup Настройка Wi-Fi
+/reset Удаление сохранённой Wi-Fi сети
+/reboot Перезагрузка устройства
 
 ---
 
 Производительность
 
-Параметр| Значение
-Скорость скачивания| ~0.15–0.20 Мбит/с
-Скорость загрузки| ~0.20–0.27 Мбит/с
-Пинг| 150–200 мс
-Максимальное количество клиентов| 1
-Потребление| ~200 мА от USB
+Параметр Значение
+Скорость скачивания ~0.15–0.20 Мбит/с
+Скорость загрузки ~0.20–0.27 Мбит/с
+Пинг 150–200 мс
+Максимальное количество клиентов 1
+Потребление ~200 мА от USB
 
 Измерения получены в нормальных условиях.
 
@@ -388,60 +402,63 @@ Satura Bridge в первую очередь рассчитан на стары�
 
 Протестировано
 
-Устройство / платформа| Результат
-Sony Ericsson J108| Протестировано
-Старые Android-устройства| ✅ Работает
-NetFront 3.4| ✅ Работает
-J2ME-приложения| ✅ Работает
+Устройство / платформа Результат
+Sony Ericsson J108 Протестировано
+Старые Android-устройства ✅ Работает
+NetFront 3.4 ✅ Работает
+J2ME-приложения ✅ Работает
 
 Совместимость с конкретными устройствами может зависеть от реализации Bluetooth PAN и используемой операционной системы.
 
-Если вы протестировали Satura Bridge на устройстве, которого нет в списке, напишите результат в "сообщество" (https://t.me/nnmidletschat).
+Если вы протестировали Satura Bridge на устройстве, которого нет в списке, напишите результат в сообщество.
 
 Желательно указать:
 
-- модель устройства;
-- операционную систему и версию;
-- поддержку Bluetooth-профилей, если известна;
-- удалось ли выполнить сопряжение;
-- удалось ли установить PAN-соединение;
-- работает ли веб-браузер.
+· модель устройства;
+· операционную систему и версию;
+· поддержку Bluetooth-профилей, если известна;
+· удалось ли выполнить сопряжение;
+· удалось ли установить PAN-соединение;
+· работает ли веб-браузер.
 
 ---
 
 Планы
 
-- [x] Bluetooth Classic PAN
-- [x] Wi-Fi подключение к интернету
-- [x] NAT / маршрутизация
-- [x] Веб-интерфейс настройки
-- [x] Автоматическое подключение к Wi-Fi
-- [x] Восстановление соединения
-- [x] Watchdog и механизмы восстановления
-- [ ] Протестировать больше устройств Nokia на Symbian
-- [ ] Протестировать больше устройств Sony Ericsson
-- [ ] Улучшить совместимость со старыми телефонами
-- [ ] Улучшить совместную работу Bluetooth и Wi-Fi
-- [ ] Разработать компактную собственную PCB под два модуля ESP32
-- [ ] Исследовать поддержку Ethernet
+· Bluetooth Classic PAN
+· Wi-Fi подключение к интернету
+· NAT / маршрутизация
+· Веб-интерфейс настройки
+· Автоматическое подключение к Wi-Fi
+· Восстановление соединения
+· Watchdog и механизмы восстановления
+· Протестировать больше устройств Nokia на Symbian
+· Протестировать больше устройств Sony Ericsson
+· Улучшить совместимость со старыми телефонами
+· Улучшить совместную работу Bluetooth и Wi-Fi
+· Разработать компактную собственную PCB под два модуля ESP32
+· Исследовать поддержку Ethernet
 
 ---
 
 Сборка из исходников
 
-Требуется "ESP-IDF v5.4.x" (https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
+Требуется ESP-IDF v5.4.x.
 
+```bash
 git clone --recursive https://github.com/sigildeveloper/satura-bridge
 cd satura-bridge
 idf.py build
 idf.py flash monitor
+```
 
-Компоненты автоматически подтягиваются через "idf_component.yml".
+Компоненты автоматически подтягиваются через idf_component.yml.
 
 ---
 
 Структура проекта
 
+```
 satura-bridge/
 ├── main/
 │   ├── pan_wifi_bridge.c   # Основная логика шлюза
@@ -453,6 +470,7 @@ satura-bridge/
 ├── sdkconfig.defaults      # Конфигурация сборки
 ├── FLASH.md                # Инструкция по прошивке
 └── README.md
+```
 
 ---
 
@@ -460,7 +478,7 @@ satura-bridge/
 
 Vetera Bridge
 
-"Vetera Bridge" (https://github.com/arifwn/vetera-bridge) — отдельный проект, который обеспечивает доступ к интернету через Bluetooth PPP для старых устройств S60 v1, включая Nokia N-Gage и другие аппараты, не поддерживающие Bluetooth PAN.
+Vetera Bridge — отдельный проект, который обеспечивает доступ к интернету через Bluetooth PPP для старых устройств S60 v1, включая Nokia N-Gage и другие аппараты, не поддерживающие Bluetooth PAN.
 
 На стороне телефона используется GnuBox.
 
@@ -470,11 +488,11 @@ Satura Bridge и Vetera Bridge рассчитаны на разные покол
 
 Лицензия
 
-Satura Bridge распространяется под "лицензией MIT" (LICENSE).
+Satura Bridge распространяется под лицензией MIT.
 
 Делайте с проектом что хотите, но, пожалуйста, сохраняйте указание авторства.
 
-BTstack в "components/btstack/" распространяется под собственной лицензией. См. ""components/btstack/LICENSE"" (components/btstack/LICENSE).
+BTstack в components/btstack/ распространяется под собственной лицензией. См. components/btstack/LICENSE.
 
 ---
 
@@ -482,6 +500,8 @@ BTstack в "components/btstack/" распространяется под соб�
 
 Автор: @sigdev
 
-Сообщество: "Telegram — @nnmidletschat" (https://t.me/nnmidletschat)
+Сообщество: Telegram — @nnmidletschat
 
 Ретро-телефоны • Symbian • J2ME • Bluetooth networking
+
+```
