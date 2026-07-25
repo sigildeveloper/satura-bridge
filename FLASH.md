@@ -103,7 +103,7 @@ Satura Bridge will connect to the configured Wi-Fi network and provide Internet 
 
 Самый простой способ прошить Satura Bridge — использовать веб-прошивальщик ESP Web Tools.
 
-1. Откройте [https://esp.huhn.me] (https://esp.huhn.me) в Google Chrome или Microsoft Edge.
+1. Откройте [https://esp.huhn.me](https://esp.huhn.me) в Google Chrome или Microsoft Edge.
 
 2. Подключите ESP32 к компьютеру по USB.
 
