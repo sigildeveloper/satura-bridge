@@ -6,7 +6,7 @@ Option 1 — Online, no software required (recommended)
 
 The easiest way to flash Satura Bridge is using the browser-based ESP Web Tools flasher.
 
-1. Open [https://esp.huhn.me] (https://esp.huhn.me) in Google Chrome or Microsoft Edge.
+1. Open [https://esp.huhn.me](https://esp.huhn.me) in Google Chrome or Microsoft Edge.
 
 2. Connect your ESP32 board to your computer via USB.
 
