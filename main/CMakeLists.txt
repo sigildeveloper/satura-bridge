@@ -3,6 +3,7 @@ idf_component_register(
         "pan_wifi_bridge.c"
         "main.c"
         "dns_server.c"
+        "nvs_storage.c"
 
     INCLUDE_DIRS "."
 

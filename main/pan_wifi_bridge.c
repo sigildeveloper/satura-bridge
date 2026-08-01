@@ -67,6 +67,7 @@
 #include "app_state.h"
 #include "task_utils.h"
 #include "dns_server.h"
+#include "nvs_storage.h"
 
 static const char *TAG = "pan_bridge";
 
@@ -233,37 +234,6 @@ static void set_app_state(app_state_t new_state) {
     if (changed)
         ESP_LOGI(TAG, "[STATE] %s -> %s",
                  state_to_str(old_state), state_to_str(new_state));
-}
-
-static bool nvs_save(const char *ssid, const char *pass) {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_set_str(h, NVS_KEY_SSID, ssid);
-    nvs_set_str(h, NVS_KEY_PASS, pass);
-    nvs_commit(h);
-    nvs_close(h);
-    return true;
-}
-
-static bool nvs_load(void) {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return false;
-    size_t sl = sizeof(wifi_ssid), pl = sizeof(wifi_pass);
-    bool ok = nvs_get_str(h, NVS_KEY_SSID, wifi_ssid, &sl) == ESP_OK
-           && nvs_get_str(h, NVS_KEY_PASS, wifi_pass, &pl) == ESP_OK
-           && strlen(wifi_ssid) > 0;
-    nvs_close(h);
-    return ok;
-}
-
-static void nvs_clear(void) {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
-        nvs_erase_key(h, NVS_KEY_SSID);
-        nvs_erase_key(h, NVS_KEY_PASS);
-        nvs_commit(h);
-        nvs_close(h);
-    }
 }
 
 // ============================================================
@@ -885,7 +855,7 @@ static esp_err_t handler_setup_post(httpd_req_t *req) {
         strncpy(wifi_pass, np, sizeof(wifi_pass) - 1);
         taskEXIT_CRITICAL(&state_mux);
 
-        nvs_save(wifi_ssid, wifi_pass);
+        nvs_storage_save(wifi_ssid, wifi_pass);
         set_app_state(APP_WIFI_CONNECTING);
         wifi_start_connect();
 
@@ -901,7 +871,7 @@ static esp_err_t handler_reset(httpd_req_t *req) {
     memset(wifi_ssid, 0, sizeof(wifi_ssid));
     memset(wifi_pass, 0, sizeof(wifi_pass));
     taskEXIT_CRITICAL(&state_mux);
-    nvs_clear();
+    nvs_storage_clear();
     esp_wifi_disconnect();
     set_app_state(APP_NO_WIFI);
     httpd_resp_set_status(req, "302 Found");
@@ -1170,7 +1140,7 @@ int btstack_main(int argc, const char *argv[]) {
 
     wifi_init();
 
-    if (nvs_load()) {
+    if (nvs_storage_load(wifi_ssid, sizeof(wifi_ssid), wifi_pass, sizeof(wifi_pass))) {
         ESP_LOGI(TAG, "[APP] credentials loaded, waiting for BT before WiFi");
         /* Stay in APP_WAIT_BT — wifi_start_connect fires after BT connects */
     } else {
