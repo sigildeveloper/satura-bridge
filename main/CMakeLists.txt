@@ -4,6 +4,7 @@ idf_component_register(
         "main.c"
         "dns_server.c"
         "nvs_storage.c"
+        "http_utils.c"
 
     INCLUDE_DIRS "."
 
