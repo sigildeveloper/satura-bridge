@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "pan_wifi_bridge.c"
         "main.c"
+        "dns_server.c"
 
     INCLUDE_DIRS "."
 

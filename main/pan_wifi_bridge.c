@@ -63,6 +63,11 @@
 #include "freertos/task.h"
 #include "freertos/portmacro.h"
 
+#include "config.h"
+#include "app_state.h"
+#include "task_utils.h"
+#include "dns_server.h"
+
 static const char *TAG = "pan_bridge";
 
 // ============================================================
@@ -85,23 +90,10 @@ static const char *TAG = "pan_bridge";
 #define DNS_CACHE_SIZE          16
 #define DNS_MAX_PACKET          512
 
-/* Watchdog fires every HEARTBEAT_INTERVAL_MS.
- * DNS is considered hung after DNS_WATCHDOG_TICKS consecutive failures. */
-#define DNS_WATCHDOG_MS         15000
-#define DNS_WATCHDOG_TICKS      2
-
 #define BT_REOPEN_DELAY_MS      1200
 #define HEAP_WARN_THRESHOLD     24576   /* 24 KB — warn early */
 #define HEAP_REBOOT_THRESHOLD   8192    /* 8 KB — reboot before allocator panics */
 #define HEARTBEAT_INTERVAL_MS   30000
-
-#define GW_IP0 192
-#define GW_IP1 168
-#define GW_IP2 7
-#define GW_IP3 1
-#define GW_IP_STR "192.168.7.1"
-
-#define FALLBACK_DNS "8.8.8.8"
 
 // ============================================================
 // Forward Declarations
@@ -119,7 +111,6 @@ typedef enum {
 static void wifi_start_connect(void);
 static void wifi_soft_reset(void);
 static void wifi_recovery_task(void *arg);
-static void dns_server_task(void *arg);
 static void watchdog_task(void *arg);
 static void bt_reopen_task(void *arg);
 static void wifi_retry_task(void *arg);
@@ -162,28 +153,6 @@ static btstack_packet_callback_registration_t hci_event_cb;
 
 static volatile int bt_reopen_counter = 0;
 
-/* DNS */
-typedef struct {
-    bool     valid;
-    uint16_t hash;
-    uint16_t qlen;
-    uint16_t rlen;
-    uint32_t saved_ms;
-    uint8_t  query[DNS_MAX_PACKET];
-    uint8_t  reply[DNS_MAX_PACKET];
-} dns_cache_entry_t;
-
-/* dns_srv_sock / dns_ext_sock: written only by dns_server_task itself.
- * dns_task_handle: written by watchdog (under state_mux) and by dns task on exit.
- * dns_restart_flag: set by watchdog, cleared by dns task — volatile is enough. */
-static int dns_srv_sock = -1;
-static int dns_ext_sock = -1;
-
-static dns_cache_entry_t dns_cache[DNS_CACHE_SIZE];
-static uint8_t dns_cache_next = 0;
-static TaskHandle_t dns_task_handle = NULL;
-static volatile uint32_t dns_last_alive_ms = 0;
-static volatile bool     dns_restart_flag  = false;   /* watchdog → dns task */
 
 /* Event handler instance handles — needed for proper unregister */
 static esp_event_handler_instance_t wifi_evt_inst = NULL;
@@ -201,7 +170,11 @@ static inline bool get_bt_connected(void) {
     return val;
 }
 
-static inline bool get_wifi_connected(void) {
+esp_netif_t *app_get_sta_netif(void) {
+    return sta_netif;
+}
+
+bool get_wifi_connected(void) {
     bool val;
     taskENTER_CRITICAL(&state_mux);
     val = wifi_connected;
@@ -221,7 +194,7 @@ static inline hci_con_handle_t get_bt_handle(void) {
 // Helpers & NVS
 // ============================================================
 
-static void safe_task_create(TaskFunction_t fn, const char *name,
+void safe_task_create(TaskFunction_t fn, const char *name,
                               uint32_t stack, void *arg,
                               UBaseType_t prio, TaskHandle_t *handle) {
     if (xTaskCreate(fn, name, stack, arg, prio, handle) != pdPASS) {
@@ -579,252 +552,6 @@ static void wifi_recovery_task(void *arg) {
     vTaskDelete(NULL);
 }
 
-// ============================================================
-// DNS — cache helpers
-// ============================================================
-
-static uint16_t dns_query_hash(const uint8_t *q, int qlen) {
-    uint32_t h = 0;
-    for (int i = 12; i < qlen && i < 40; i++) h = h * 31 + q[i];
-    return (uint16_t)(h ^ (h >> 16));
-}
-
-static bool dns_cache_lookup(const uint8_t *query, int qlen,
-                              uint8_t *reply, int *rlen) {
-    if (qlen < 12) return false;
-    uint16_t qhash = dns_query_hash(query, qlen);
-    uint32_t now   = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    for (int i = 0; i < DNS_CACHE_SIZE; i++) {
-        dns_cache_entry_t *e = &dns_cache[i];
-        if (!e->valid || e->hash != qhash || e->qlen != (uint16_t)qlen) continue;
-        if ((uint32_t)(now - e->saved_ms) > 60000) { e->valid = false; continue; }
-        if (qlen > 12 && memcmp(e->query + 12, query + 12, qlen - 12) != 0) continue;
-        memcpy(reply, e->reply, e->rlen);
-        reply[0] = query[0];
-        reply[1] = query[1];
-        *rlen = e->rlen;
-        return true;
-    }
-    return false;
-}
-
-static void dns_cache_store(const uint8_t *query, int qlen,
-                             const uint8_t *reply, int rlen) {
-    if (qlen < 12 || qlen > DNS_MAX_PACKET ||
-        rlen < 12 || rlen > DNS_MAX_PACKET) return;
-    dns_cache_entry_t *e = &dns_cache[dns_cache_next];
-    dns_cache_next = (dns_cache_next + 1) % DNS_CACHE_SIZE;
-    e->valid    = true;
-    e->hash     = dns_query_hash(query, qlen);
-    e->qlen     = (uint16_t)qlen;
-    e->rlen     = (uint16_t)rlen;
-    e->saved_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    memcpy(e->query, query, qlen);
-    memcpy(e->reply, reply, rlen);
-    /* Zero out txid so hash/comparison ignores it */
-    e->query[0] = e->query[1] = e->reply[0] = e->reply[1] = 0;
-}
-
-/* FIX: only generate captive reply for A-type queries.
- * AAAA / PTR / MX / SRV etc. get NXDOMAIN so the client
- * doesn't loop waiting for a non-A answer and retries A. */
-static int dns_make_captive_reply(const uint8_t *query, int qlen,
-                                   uint8_t *reply, int rmax) {
-    if (qlen < 12 || rmax < 28) return 0;
-
-    /* Locate qtype — it's the 2 bytes just before qclass at the end
-     * of the question section.  Walk the QNAME labels first. */
-    int off = 12;
-    while (off < qlen - 4) {
-        uint8_t len = query[off];
-        if (len == 0) { off++; break; }                 /* root label */
-        if ((len & 0xC0) == 0xC0) { off += 2; break; } /* pointer (unlikely here) */
-        off += 1 + len;
-    }
-    if (off + 4 > qlen) return 0;
-    uint16_t qtype  = (query[off] << 8)     | query[off + 1];
-    /* uint16_t qclass = (query[off+2] << 8) | query[off+3]; */
-
-    /* Only answer A (0x0001) queries with our IP */
-    if (qtype != 0x0001) {
-        /* Send NXDOMAIN (RCODE=3) so the client moves on quickly */
-        if (rmax < 12) return 0;
-        if (qlen > 200) qlen = 200;
-        memcpy(reply, query, qlen > 12 ? 12 : qlen);
-        reply[0] = query[0]; reply[1] = query[1];
-        reply[2] = 0x81; reply[3] = 0x83; /* QR=1 AA=0 RCODE=3 */
-        reply[4] = 0x00; reply[5] = 0x01; /* QDCOUNT=1 */
-        reply[6] = 0x00; reply[7] = 0x00; /* ANCOUNT=0 */
-        reply[8] = 0x00; reply[9] = 0x00;
-        reply[10]= 0x00; reply[11]= 0x00;
-        int rlen = 12;
-        int qsz  = qlen - 12;
-        if (qsz > 0 && rlen + qsz <= rmax) {
-            memcpy(reply + rlen, query + 12, qsz);
-            rlen += qsz;
-        }
-        return rlen;
-    }
-
-    /* Build A reply pointing to gateway */
-    if (qlen > 200) qlen = 200;
-    reply[0] = query[0]; reply[1] = query[1];
-    reply[2] = 0x81; reply[3] = 0x80;
-    reply[4] = 0x00; reply[5] = 0x01;
-    reply[6] = 0x00; reply[7] = 0x01;
-    reply[8] = 0x00; reply[9] = 0x00;
-    reply[10]= 0x00; reply[11]= 0x00;
-    int rlen   = 12;
-    int qsection = qlen - 12;
-    if (qsection <= 0 || rlen + qsection + 16 > rmax) return 0;
-    memcpy(reply + rlen, query + 12, qsection);
-    rlen += qsection;
-    reply[rlen++] = 0xC0; reply[rlen++] = 0x0C;
-    reply[rlen++] = 0x00; reply[rlen++] = 0x01;
-    reply[rlen++] = 0x00; reply[rlen++] = 0x01;
-    reply[rlen++] = 0x00; reply[rlen++] = 0x00;
-    reply[rlen++] = 0x00; reply[rlen++] = 0x3C;
-    reply[rlen++] = 0x00; reply[rlen++] = 0x04;
-    reply[rlen++] = GW_IP0; reply[rlen++] = GW_IP1;
-    reply[rlen++] = GW_IP2; reply[rlen++] = GW_IP3;
-    return rlen;
-}
-
-static bool dns_forward(int ext_sock, struct sockaddr_in *ext_dns,
-                         const uint8_t *query, int qlen,
-                         uint8_t *reply, int *rlen) {
-    if (sendto(ext_sock, query, qlen, 0,
-               (struct sockaddr *)ext_dns, sizeof(*ext_dns)) < 0) return false;
-    struct sockaddr_in from;
-    socklen_t fl = sizeof(from);
-    int n = recvfrom(ext_sock, reply, DNS_MAX_PACKET, 0,
-                     (struct sockaddr *)&from, &fl);
-    if (n >= 12 && reply[0] == query[0] && reply[1] == query[1]) {
-        *rlen = n; return true;
-    }
-    return false;
-}
-
-static void dns_get_upstream(struct sockaddr_in *out) {
-    out->sin_family = AF_INET;
-    out->sin_port   = htons(53);
-    esp_netif_dns_info_t dns_info = {0};
-    if (sta_netif &&
-        esp_netif_get_dns_info(sta_netif, ESP_NETIF_DNS_MAIN, &dns_info) == ESP_OK
-        && dns_info.ip.u_addr.ip4.addr != 0) {
-        out->sin_addr.s_addr = dns_info.ip.u_addr.ip4.addr;
-    } else {
-        inet_pton(AF_INET, FALLBACK_DNS, &out->sin_addr);
-    }
-}
-
-// ============================================================
-// DNS — server task
-// ============================================================
-
-/* FIX: the task now owns its sockets for the full lifetime.
- * Restart is signalled via dns_restart_flag; the task closes its
- * own sockets and deletes itself — no external vTaskDelete.
- * Watchdog only sets the flag and clears dns_task_handle. */
-static void dns_server_task(void *arg) {
-    (void)arg;
-
-    dns_restart_flag = false;
-
-    dns_srv_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (dns_srv_sock < 0) {
-        ESP_LOGE(TAG, "[DNS] failed to open srv sock: %d", errno);
-        taskENTER_CRITICAL(&state_mux);
-        dns_task_handle = NULL;
-        taskEXIT_CRITICAL(&state_mux);
-        vTaskDelete(NULL);
-        return;
-    }
-    dns_ext_sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (dns_ext_sock < 0) {
-        ESP_LOGE(TAG, "[DNS] failed to open ext sock: %d", errno);
-        close(dns_srv_sock);
-        dns_srv_sock = -1;
-        taskENTER_CRITICAL(&state_mux);
-        dns_task_handle = NULL;
-        taskEXIT_CRITICAL(&state_mux);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    struct timeval tv  = {1, 0};
-    struct timeval tv2 = {0, DNS_TIMEOUT_MS * 1000};
-    setsockopt(dns_srv_sock, SOL_SOCKET, SO_RCVTIMEO, &tv,  sizeof(tv));
-    setsockopt(dns_ext_sock, SOL_SOCKET, SO_RCVTIMEO, &tv2, sizeof(tv2));
-
-    struct sockaddr_in local = {
-        .sin_family      = AF_INET,
-        .sin_port        = htons(DNS_PORT),
-        .sin_addr.s_addr = htonl(INADDR_ANY)
-    };
-    if (bind(dns_srv_sock, (struct sockaddr *)&local, sizeof(local)) != 0) {
-        ESP_LOGE(TAG, "[DNS] bind failed: %d", errno);
-        close(dns_srv_sock);
-        close(dns_ext_sock);
-        dns_srv_sock = dns_ext_sock = -1;
-        taskENTER_CRITICAL(&state_mux);
-        dns_task_handle = NULL;
-        taskEXIT_CRITICAL(&state_mux);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    ESP_LOGI(TAG, "[DNS] task started");
-
-    while (1) {
-        /* FIX: check restart flag — self-terminate cleanly */
-        if (dns_restart_flag) {
-            ESP_LOGW(TAG, "[DNS] restart flag — shutting down task");
-            break;
-        }
-
-        dns_last_alive_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-
-        uint8_t query_buf[DNS_MAX_PACKET], reply_buf[DNS_MAX_PACKET];
-        struct sockaddr_in client;
-        socklen_t clen = sizeof(client);
-        int qlen = recvfrom(dns_srv_sock, query_buf, sizeof(query_buf),
-                            0, (struct sockaddr *)&client, &clen);
-        if (qlen < 12) continue;
-
-        struct sockaddr_in ext_dns;
-        dns_get_upstream(&ext_dns);
-
-        int rlen = 0;
-        bool have_reply = dns_cache_lookup(query_buf, qlen, reply_buf, &rlen);
-        if (!have_reply) {
-            /* Only forward if WiFi is up, otherwise fall through to captive */
-            if (get_wifi_connected() &&
-                dns_forward(dns_ext_sock, &ext_dns,
-                            query_buf, qlen, reply_buf, &rlen)) {
-                dns_cache_store(query_buf, qlen, reply_buf, rlen);
-                have_reply = true;
-            }
-        }
-        if (!have_reply) {
-            rlen = dns_make_captive_reply(query_buf, qlen,
-                                          reply_buf, sizeof(reply_buf));
-        }
-        if (rlen > 0) {
-            sendto(dns_srv_sock, reply_buf, rlen, 0,
-                   (struct sockaddr *)&client, clen);
-        }
-    }
-
-    /* Graceful shutdown */
-    close(dns_srv_sock);
-    close(dns_ext_sock);
-    dns_srv_sock = dns_ext_sock = -1;
-    taskENTER_CRITICAL(&state_mux);
-    dns_task_handle = NULL;
-    taskEXIT_CRITICAL(&state_mux);
-    vTaskDelete(NULL);
-}
 
 // ============================================================
 // Watchdog & Heartbeat
@@ -851,7 +578,6 @@ static void watchdog_task(void *arg) {
     vTaskDelay(pdMS_TO_TICKS(10000));
 
     uint32_t wifi_stuck_count = 0;
-    uint32_t dns_stuck_count  = 0;
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MS));
@@ -915,42 +641,8 @@ static void watchdog_task(void *arg) {
         }
 
         /* DNS hung watchdog */
-        TaskHandle_t dns_h;
-        taskENTER_CRITICAL(&state_mux);
-        dns_h = dns_task_handle;
-        taskEXIT_CRITICAL(&state_mux);
-
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000ULL);
-        if (dns_h != NULL &&
-            (now - dns_last_alive_ms) > DNS_WATCHDOG_MS) {
-            if (++dns_stuck_count >= DNS_WATCHDOG_TICKS) {
-                ESP_LOGE(TAG, "[WDT] DNS hang! Signalling restart...");
-
-                /* FIX: set flag — task closes its own sockets and exits */
-                dns_restart_flag = true;
-                taskENTER_CRITICAL(&state_mux);
-                dns_task_handle = NULL;   /* prevent double-signal */
-                taskEXIT_CRITICAL(&state_mux);
-
-                /* Give the task one SO_RCVTIMEO (1 s) to notice the flag */
-                vTaskDelay(pdMS_TO_TICKS(1500));
-
-                /* Clear cache and spawn fresh task */
-                memset(dns_cache, 0, sizeof(dns_cache));
-                dns_cache_next = 0;
-                dns_last_alive_ms = now;
-
-                TaskHandle_t new_h = NULL;
-                safe_task_create(dns_server_task, "dns", 4096, NULL, 6, &new_h);
-                taskENTER_CRITICAL(&state_mux);
-                dns_task_handle = new_h;
-                taskEXIT_CRITICAL(&state_mux);
-
-                dns_stuck_count = 0;
-            }
-        } else {
-            dns_stuck_count = 0;
-        }
+        dns_server_watchdog_tick(now);
 
         /* Heap watchdog */
         if (free_heap < HEAP_WARN_THRESHOLD) {
@@ -1487,12 +1179,7 @@ int btstack_main(int argc, const char *argv[]) {
 
     dhserv_init(&dhcp_config);
 
-    dns_last_alive_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    TaskHandle_t dns_h = NULL;
-    safe_task_create(dns_server_task, "dns", 4096, NULL, 6, &dns_h);
-    taskENTER_CRITICAL(&state_mux);
-    dns_task_handle = dns_h;
-    taskEXIT_CRITICAL(&state_mux);
+    dns_server_start();
 
     safe_task_create(watchdog_task, "wdt", 4096, NULL, 2, NULL);
 
