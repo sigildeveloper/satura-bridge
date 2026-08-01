@@ -115,7 +115,6 @@ set(priv_requires
     "vfs"
     "esp_driver_gpio"
     "esp_driver_uart"
-    "esp_http_server"
 )
 
 idf_component_register(
