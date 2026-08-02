@@ -10,8 +10,9 @@
 
 #include "dns_server.h"
 #include "config.h"
-#include "app_state.h"
 #include "task_utils.h"
+#include "app_state.h"
+#include "wifi_manager.h"
 
 static const char *TAG = "dns_server";
 
@@ -161,7 +162,7 @@ static void dns_get_upstream(struct sockaddr_in *out) {
     out->sin_family = AF_INET;
     out->sin_port   = htons(53);
     esp_netif_dns_info_t dns_info = {0};
-    esp_netif_t *sta = app_get_sta_netif();
+    esp_netif_t *sta = wifi_manager_get_sta_netif();
     if (sta &&
         esp_netif_get_dns_info(sta, ESP_NETIF_DNS_MAIN, &dns_info) == ESP_OK
         && dns_info.ip.u_addr.ip4.addr != 0) {

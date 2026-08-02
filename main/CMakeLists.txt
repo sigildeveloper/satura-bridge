@@ -6,6 +6,7 @@ idf_component_register(
         "nvs_storage.c"
         "http_utils.c"
         "app_state.c"
+        "wifi_manager.c"
 
     INCLUDE_DIRS "."
 
