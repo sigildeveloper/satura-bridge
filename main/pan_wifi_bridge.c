@@ -101,14 +101,6 @@ static const char *TAG = "pan_bridge";
 // Forward Declarations
 // ============================================================
 
-typedef enum {
-    APP_WAIT_BT,
-    APP_NO_WIFI,
-    APP_WIFI_CONNECTING,
-    APP_WIFI_FAILED,
-    APP_BRIDGE,
-    APP_BRIDGE_NO_WIFI,
-} app_state_t;
 
 static void wifi_start_connect(void);
 static void wifi_soft_reset(void);
@@ -210,32 +202,6 @@ static uint32_t uptime_seconds(void) {
     return (uint32_t)((esp_timer_get_time() - boot_us) / 1000000ULL);
 }
 
-static const char *state_to_str(app_state_t st) {
-    switch (st) {
-        case APP_WAIT_BT:         return "WAIT_BT";
-        case APP_NO_WIFI:         return "NO_WIFI";
-        case APP_WIFI_CONNECTING: return "WIFI_CONN";
-        case APP_WIFI_FAILED:     return "WIFI_FAIL";
-        case APP_BRIDGE:          return "BRIDGE_ACTIVE";
-        case APP_BRIDGE_NO_WIFI:  return "BRIDGE_LOST_WIFI";
-        default:                  return "UNKNOWN";
-    }
-}
-
-static void set_app_state(app_state_t new_state) {
-    app_state_t old_state;
-    bool changed = false;
-    taskENTER_CRITICAL(&state_mux);
-    old_state = app_state;
-    if (old_state != new_state) {
-        app_state = new_state;
-        changed = true;
-    }
-    taskEXIT_CRITICAL(&state_mux);
-    if (changed)
-        ESP_LOGI(TAG, "[STATE] %s -> %s",
-                 state_to_str(old_state), state_to_str(new_state));
-}
 
 // ============================================================
 // NAT & Network
@@ -340,7 +306,7 @@ static void wifi_start_connect(void) {
     cfg.sta.pmf_cfg.required = false;
     esp_wifi_set_config(WIFI_IF_STA, &cfg);
 
-    set_app_state(APP_WIFI_CONNECTING);
+    app_state_set(APP_WIFI_CONNECTING);
 
     taskENTER_CRITICAL(&state_mux);
     wifi_retries       = 0;
@@ -363,6 +329,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             taskENTER_CRITICAL(&state_mux);
             wifi_connected = false;
             taskEXIT_CRITICAL(&state_mux);
+            app_state_t st = app_state_get();
             update_nat();
             return;
         }
@@ -386,7 +353,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             if (retries < WIFI_MAX_RETRIES) {
                 wifi_schedule_retry(delay);
             } else {
-                set_app_state(APP_WIFI_FAILED);
+                app_state_set(APP_WIFI_FAILED);
             }
 
         } else if (st == APP_BRIDGE || st == APP_BRIDGE_NO_WIFI) {
@@ -395,11 +362,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             taskEXIT_CRITICAL(&state_mux);
 
             if (!has_ssid) {
-                set_app_state(APP_NO_WIFI);
+                app_state_set(APP_NO_WIFI);
                 return;
             }
             if (st == APP_BRIDGE) {
-                set_app_state(APP_BRIDGE_NO_WIFI);
+                app_state_set(APP_BRIDGE_NO_WIFI);
                 taskENTER_CRITICAL(&state_mux);
                 wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
                 wifi_retries = 0;
@@ -434,15 +401,15 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         wifi_retries        = 0;
         wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
         bool bt   = bt_connected;
-        app_state_t st = app_state;
         taskEXIT_CRITICAL(&state_mux);
+        app_state_t st = app_state_get();
 
         update_nat();
 
         if (bt) {
-            set_app_state(APP_BRIDGE);
+            app_state_set(APP_BRIDGE);
         } else if (st != APP_WAIT_BT) {
-            set_app_state(APP_WAIT_BT);
+            app_state_set(APP_WAIT_BT);
         }
     }
 }
@@ -557,12 +524,12 @@ static void watchdog_task(void *arg) {
         size_t min_heap  = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
 
         taskENTER_CRITICAL(&state_mux);
-        app_state_t st    = app_state;
         bool b_conn = bt_connected;
         bool w_conn = wifi_connected;
         int8_t rw   = wifi_rssi;
         int8_t rb   = bt_rssi;
         taskEXIT_CRITICAL(&state_mux);
+        app_state_t st = app_state_get();
 
         /* Update WiFi RSSI */
         wifi_ap_record_t ap = {0};
@@ -581,7 +548,7 @@ static void watchdog_task(void *arg) {
             "[HB] State:%s | BT:%s RSSI:%d | WiFi:%s RSSI:%d"
             " | Heap:%dKB min:%dKB | Up:%" PRIu32 "d %02" PRIu32
             ":%02" PRIu32 ":%02" PRIu32,
-            state_to_str(st),
+            app_state_to_str(st),
             b_conn ? "ON" : "OFF", (int)rb,
             w_conn ? "ON" : "OFF", (int)rw,
             (int)(free_heap / 1024), (int)(min_heap / 1024),
@@ -633,9 +600,7 @@ static void watchdog_task(void *arg) {
 // ============================================================
 
 static bool captive_check(httpd_req_t *req) {
-    taskENTER_CRITICAL(&state_mux);
-    app_state_t st = app_state;
-    taskEXIT_CRITICAL(&state_mux);
+    app_state_t st = app_state_get();
     if (st == APP_BRIDGE) return true;
     char host[64] = {0};
     if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK
@@ -745,12 +710,12 @@ static esp_err_t handler_root(httpd_req_t *req) {
     set_no_cache(req, "text/html");
 
     taskENTER_CRITICAL(&state_mux);
-    app_state_t st    = app_state;
     int retries       = wifi_retries;
     bool w_conn       = wifi_connected;
     int8_t rw         = wifi_rssi;
     int8_t rb         = bt_rssi;
     taskEXIT_CRITICAL(&state_mux);
+    app_state_t st = app_state_get();
 
     bool show_status = (st == APP_BRIDGE) ||
                        (st == APP_WAIT_BT && w_conn);
@@ -837,7 +802,7 @@ static esp_err_t handler_setup_post(httpd_req_t *req) {
         taskEXIT_CRITICAL(&state_mux);
 
         nvs_storage_save(wifi_ssid, wifi_pass);
-        set_app_state(APP_WIFI_CONNECTING);
+        app_state_set(APP_WIFI_CONNECTING);
         wifi_start_connect();
 
         httpd_resp_set_status(req, "302 Found");
@@ -854,7 +819,7 @@ static esp_err_t handler_reset(httpd_req_t *req) {
     taskEXIT_CRITICAL(&state_mux);
     nvs_storage_clear();
     esp_wifi_disconnect();
-    set_app_state(APP_NO_WIFI);
+    app_state_set(APP_NO_WIFI);
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/");
     return httpd_resp_send(req, NULL, 0);
@@ -1015,9 +980,9 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
             bt_set_visible(false);
 
             if (wc) {
-                set_app_state(APP_BRIDGE);
+                app_state_set(APP_BRIDGE);
             } else if (!has_ssid) {
-                set_app_state(APP_NO_WIFI);
+                app_state_set(APP_NO_WIFI);
                 taskENTER_CRITICAL(&state_mux);
                 wifi_rssi = -100;
                 taskEXIT_CRITICAL(&state_mux);
@@ -1038,7 +1003,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
             if (!already) bt_reopen_running = true;
             taskEXIT_CRITICAL(&state_mux);
 
-            set_app_state(APP_WAIT_BT);
+            app_state_set(APP_WAIT_BT);
 
             if (!already) {
                 bt_reopen_counter++;
@@ -1125,7 +1090,7 @@ int btstack_main(int argc, const char *argv[]) {
         ESP_LOGI(TAG, "[APP] credentials loaded, waiting for BT before WiFi");
         /* Stay in APP_WAIT_BT — wifi_start_connect fires after BT connects */
     } else {
-        set_app_state(APP_NO_WIFI);
+        app_state_set(APP_NO_WIFI);
     }
 
     dhserv_init(&dhcp_config);
