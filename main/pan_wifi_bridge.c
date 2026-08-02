@@ -108,6 +108,7 @@ static void wifi_recovery_task(void *arg);
 static void watchdog_task(void *arg);
 static void bt_reopen_task(void *arg);
 static void wifi_retry_task(void *arg);
+static btstack_context_callback_registration_t rssi_cb_reg;
 
 // ============================================================
 // Globals
@@ -476,16 +477,26 @@ static void wifi_recovery_task(void *arg) {
  * btstack_context_callback_registration_t *, not a bare function pointer.
  * We keep a static registration struct and reuse it each heartbeat.
  * The struct must stay alive until the callback fires — static is safe. */
+static volatile bool rssi_poll_pending = false;
+
 static void rssi_poll_cb(void *context) {
     (void)context;
     hci_con_handle_t h = get_bt_handle();
     if (h != HCI_CON_HANDLE_INVALID) gap_read_rssi(h);
+    rssi_poll_pending = false;
 }
 
 static btstack_context_callback_registration_t rssi_cb_reg = {
     .callback = rssi_poll_cb,
     .context  = NULL,
 };
+
+static void request_rssi_poll(void) {
+    if (!rssi_poll_pending) {
+        rssi_poll_pending = true;
+        btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
+    }
+}
 
 static void watchdog_task(void *arg) {
     (void)arg;
@@ -513,7 +524,7 @@ static void watchdog_task(void *arg) {
         }
 
         /* FIX: schedule BT RSSI poll in BTstack's own thread */
-        btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
+        request_rssi_poll();
 
         uint32_t up = uptime_seconds();
         ESP_LOGI(TAG,
@@ -680,6 +691,15 @@ static const char PAGE_SETUP_FAILED[] =
 static esp_err_t handler_root(httpd_req_t *req) {
     if (!captive_check(req)) return ESP_OK;
     set_no_cache(req, "text/html");
+
+    /* Trigger a fresh RSSI poll on every page load — result arrives
+        * asynchronously and will be visible on the next refresh/reload. */
+    // if (get_bt_connected()) {
+    //     btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
+    // }
+    if (get_bt_connected()) {
+        request_rssi_poll();
+    }
 
     app_state_t st    = app_state_get();
     bool w_conn       = get_wifi_connected();
@@ -926,7 +946,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
 
         case BNEP_EVENT_CHANNEL_OPENED: {
             if (bnep_event_channel_opened_get_status(pkt)) {
-                ESP_LOGW(TAG, "[BT] BNEP open failed status=0x%02x",
+                ESP_LOGI(TAG, "[BT] BNEP open failed status=0x%02x",
                          bnep_event_channel_opened_get_status(pkt));
                 break;
             }
@@ -955,6 +975,11 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
 
             ESP_LOGI(TAG, "[BT] BNEP channel opened");
             bt_set_visible(false);
+
+            /* Poll RSSI immediately, don't wait for the next heartbeat cycle */
+            //btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
+            /* FIX: schedule BT RSSI poll in BTstack's own thread */
+            request_rssi_poll();
 
             if (wc) {
                 app_state_set(APP_BRIDGE);
