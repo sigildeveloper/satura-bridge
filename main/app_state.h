@@ -17,3 +17,14 @@ const char *app_state_to_str(app_state_t st);
 
 bool get_wifi_connected(void);
 esp_netif_t *app_get_sta_netif(void);
+
+bool get_bt_connected(void);
+void set_bt_connected(bool connected);
+
+void set_wifi_connected(bool connected);
+
+int8_t get_bt_rssi(void);
+void   set_bt_rssi(int8_t rssi);
+
+int8_t get_wifi_rssi(void);
+void   set_wifi_rssi(int8_t rssi);

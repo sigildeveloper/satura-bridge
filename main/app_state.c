@@ -41,3 +41,64 @@ void app_state_set(app_state_t new_state) {
         ESP_LOGI(TAG, "[STATE] %s -> %s",
                  app_state_to_str(old_state), app_state_to_str(new_state));
 }
+
+static volatile bool bt_connected   = false;
+static volatile bool wifi_connected = false;
+static volatile int8_t bt_rssi      = -100;
+static volatile int8_t wifi_rssi    = -100;
+
+bool get_bt_connected(void) {
+    bool val;
+    taskENTER_CRITICAL(&app_state_mux);
+    val = bt_connected;
+    taskEXIT_CRITICAL(&app_state_mux);
+    return val;
+}
+
+void set_bt_connected(bool connected) {
+    taskENTER_CRITICAL(&app_state_mux);
+    bt_connected = connected;
+    taskEXIT_CRITICAL(&app_state_mux);
+}
+
+bool get_wifi_connected(void) {
+    bool val;
+    taskENTER_CRITICAL(&app_state_mux);
+    val = wifi_connected;
+    taskEXIT_CRITICAL(&app_state_mux);
+    return val;
+}
+
+void set_wifi_connected(bool connected) {
+    taskENTER_CRITICAL(&app_state_mux);
+    wifi_connected = connected;
+    taskEXIT_CRITICAL(&app_state_mux);
+}
+
+int8_t get_bt_rssi(void) {
+    int8_t val;
+    taskENTER_CRITICAL(&app_state_mux);
+    val = bt_rssi;
+    taskEXIT_CRITICAL(&app_state_mux);
+    return val;
+}
+
+void set_bt_rssi(int8_t rssi) {
+    taskENTER_CRITICAL(&app_state_mux);
+    bt_rssi = rssi;
+    taskEXIT_CRITICAL(&app_state_mux);
+}
+
+int8_t get_wifi_rssi(void) {
+    int8_t val;
+    taskENTER_CRITICAL(&app_state_mux);
+    val = wifi_rssi;
+    taskEXIT_CRITICAL(&app_state_mux);
+    return val;
+}
+
+void set_wifi_rssi(int8_t rssi) {
+    taskENTER_CRITICAL(&app_state_mux);
+    wifi_rssi = rssi;
+    taskEXIT_CRITICAL(&app_state_mux);
+}

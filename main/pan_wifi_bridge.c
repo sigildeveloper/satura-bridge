@@ -119,12 +119,8 @@ static portMUX_TYPE state_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static volatile app_state_t app_state = APP_WAIT_BT;
 
-static volatile int8_t bt_rssi   = -100;
-static volatile int8_t wifi_rssi = -100;
 static hci_con_handle_t bt_handle = HCI_CON_HANDLE_INVALID;
 
-static volatile bool bt_connected            = false;
-static volatile bool wifi_connected          = false;
 static volatile bool wifi_ignore_disconnect  = false;
 static volatile int  wifi_retries            = 0;
 static volatile uint32_t wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
@@ -156,25 +152,11 @@ static esp_event_handler_instance_t ip_evt_inst   = NULL;
 // Atomic accessors
 // ============================================================
 
-static inline bool get_bt_connected(void) {
-    bool val;
-    taskENTER_CRITICAL(&state_mux);
-    val = bt_connected;
-    taskEXIT_CRITICAL(&state_mux);
-    return val;
-}
 
 esp_netif_t *app_get_sta_netif(void) {
     return sta_netif;
 }
 
-bool get_wifi_connected(void) {
-    bool val;
-    taskENTER_CRITICAL(&state_mux);
-    val = wifi_connected;
-    taskEXIT_CRITICAL(&state_mux);
-    return val;
-}
 
 static inline hci_con_handle_t get_bt_handle(void) {
     hci_con_handle_t h;
@@ -326,18 +308,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         taskEXIT_CRITICAL(&state_mux);
 
         if (ignore) {
-            taskENTER_CRITICAL(&state_mux);
-            wifi_connected = false;
-            taskEXIT_CRITICAL(&state_mux);
-            app_state_t st = app_state_get();
+            set_wifi_connected(false);
             update_nat();
             return;
         }
 
-        taskENTER_CRITICAL(&state_mux);
-        wifi_connected = false;
-        app_state_t st = app_state;
-        taskEXIT_CRITICAL(&state_mux);
+        set_wifi_connected(false);
+        app_state_t st = app_state_get();
 
         update_nat();
         strncpy(wifi_ip, "--", sizeof(wifi_ip));
@@ -391,18 +368,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
 
         wifi_ap_record_t ap = {0};
         if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-            taskENTER_CRITICAL(&state_mux);
-            wifi_rssi = ap.rssi;
-            taskEXIT_CRITICAL(&state_mux);
+            set_wifi_rssi(ap.rssi);
         }
 
+        set_wifi_connected(true);
+        bool bt = get_bt_connected();
+        app_state_t st = app_state_get();
+
         taskENTER_CRITICAL(&state_mux);
-        wifi_connected      = true;
         wifi_retries        = 0;
         wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
-        bool bt   = bt_connected;
         taskEXIT_CRITICAL(&state_mux);
-        app_state_t st = app_state_get();
 
         update_nat();
 
@@ -523,21 +499,17 @@ static void watchdog_task(void *arg) {
         size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
         size_t min_heap  = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
 
-        taskENTER_CRITICAL(&state_mux);
-        bool b_conn = bt_connected;
-        bool w_conn = wifi_connected;
-        int8_t rw   = wifi_rssi;
-        int8_t rb   = bt_rssi;
-        taskEXIT_CRITICAL(&state_mux);
-        app_state_t st = app_state_get();
+        app_state_t st    = app_state_get();
+        bool b_conn = get_bt_connected();
+        bool w_conn = get_wifi_connected();
+        int8_t rw   = get_wifi_rssi();
+        int8_t rb   = get_bt_rssi();
 
         /* Update WiFi RSSI */
         wifi_ap_record_t ap = {0};
         if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-            taskENTER_CRITICAL(&state_mux);
-            wifi_rssi = ap.rssi;
+            set_wifi_rssi(ap.rssi);
             rw = ap.rssi;
-            taskEXIT_CRITICAL(&state_mux);
         }
 
         /* FIX: schedule BT RSSI poll in BTstack's own thread */
@@ -709,13 +681,14 @@ static esp_err_t handler_root(httpd_req_t *req) {
     if (!captive_check(req)) return ESP_OK;
     set_no_cache(req, "text/html");
 
+    app_state_t st    = app_state_get();
+    bool w_conn       = get_wifi_connected();
+    int8_t rw         = get_wifi_rssi();
+    int8_t rb         = get_bt_rssi();
+
     taskENTER_CRITICAL(&state_mux);
     int retries       = wifi_retries;
-    bool w_conn       = wifi_connected;
-    int8_t rw         = wifi_rssi;
-    int8_t rb         = bt_rssi;
     taskEXIT_CRITICAL(&state_mux);
-    app_state_t st = app_state_get();
 
     bool show_status = (st == APP_BRIDGE) ||
                        (st == APP_WAIT_BT && w_conn);
@@ -930,9 +903,7 @@ static void hci_packet_handler(uint8_t type, uint16_t ch,
             break;
         case GAP_EVENT_RSSI_MEASUREMENT:
             if (gap_event_rssi_measurement_get_con_handle(pkt) == get_bt_handle()) {
-                taskENTER_CRITICAL(&state_mux);
-                bt_rssi = gap_event_rssi_measurement_get_rssi(pkt);
-                taskEXIT_CRITICAL(&state_mux);
+                set_bt_rssi(gap_event_rssi_measurement_get_rssi(pkt));
             }
             break;
         case HCI_EVENT_PIN_CODE_REQUEST:
@@ -962,19 +933,25 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
             bnep_event_channel_opened_get_remote_address(pkt, addr);
             hci_con_handle_t h = bnep_event_channel_opened_get_con_handle(pkt);
 
-            taskENTER_CRITICAL(&state_mux);
-            if (bt_connected) {
-                taskEXIT_CRITICAL(&state_mux);
+            if (get_bt_connected()) {
                 bnep_disconnect(addr);
                 return;
             }
-            bt_connected = true;
+            set_bt_connected(true);
+
+            taskENTER_CRITICAL(&state_mux);
             bt_handle    = h;
-            bool wc          = wifi_connected;
-            bool has_ssid    = (strlen(wifi_ssid) != 0);
-            bool can_start   = !wifi_start_running;
-            if (can_start && !wc && has_ssid) wifi_start_running = true;
+            bool has_ssid  = (strlen(wifi_ssid) != 0);
+            bool can_start = !wifi_start_running;
+            if (can_start && !has_ssid) wifi_start_running = true;
             taskEXIT_CRITICAL(&state_mux);
+
+            bool wc = get_wifi_connected();
+            if (can_start && !wc && has_ssid) {
+                taskENTER_CRITICAL(&state_mux);
+                wifi_start_running = true;
+                taskEXIT_CRITICAL(&state_mux);
+            }
 
             ESP_LOGI(TAG, "[BT] BNEP channel opened");
             bt_set_visible(false);
@@ -983,9 +960,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
                 app_state_set(APP_BRIDGE);
             } else if (!has_ssid) {
                 app_state_set(APP_NO_WIFI);
-                taskENTER_CRITICAL(&state_mux);
-                wifi_rssi = -100;
-                taskEXIT_CRITICAL(&state_mux);
+                set_wifi_rssi(-100);
             } else if (can_start) {
                 /* FIX: use guarded flag set above */
                 safe_task_create(wifi_start_task, "wist", 3072, NULL, 5, NULL);
@@ -995,10 +970,11 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
         }
 
         case BNEP_EVENT_CHANNEL_CLOSED: {
+            set_bt_connected(false);
+            set_bt_rssi(-100);
+
             taskENTER_CRITICAL(&state_mux);
-            bt_connected = false;
             bt_handle    = HCI_CON_HANDLE_INVALID;
-            bt_rssi      = -100;
             bool already  = bt_reopen_running;
             if (!already) bt_reopen_running = true;
             taskEXIT_CRITICAL(&state_mux);
