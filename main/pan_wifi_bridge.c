@@ -39,9 +39,6 @@
 #include <inttypes.h>
 #include <errno.h>
 
-#include "btstack_config.h"
-#include "bnep_lwip.h"
-#include "btstack.h"
 #include "lwip/lwip_napt.h"
 #include "lwip/netif.h"
 #include "lwip/ip4_addr.h"
@@ -70,6 +67,7 @@
 #include "nvs_storage.h"
 #include "http_utils.h"
 #include "wifi_manager.h"
+#include "bt_pan.h"
 
 static const char *TAG = "satura_bridge";
 
@@ -99,8 +97,6 @@ static const char *TAG = "satura_bridge";
 // ============================================================
 
 static void watchdog_task(void *arg);
-static void bt_reopen_task(void *arg);
-static btstack_context_callback_registration_t rssi_cb_reg;
 
 // ============================================================
 // Globals
@@ -112,32 +108,9 @@ static portMUX_TYPE state_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static volatile app_state_t app_state = APP_WAIT_BT;
 
-static hci_con_handle_t bt_handle = HCI_CON_HANDLE_INVALID;
-
-/* One-at-a-time guards (under state_mux) */
-static volatile bool bt_reopen_running     = false;
-static volatile bool wifi_start_running    = false;
-
 static int64_t boot_us    = 0;
 
 static httpd_handle_t http_server = NULL;
-
-static uint8_t pan_sdp_record[400];
-static btstack_packet_callback_registration_t hci_event_cb;
-
-static volatile int bt_reopen_counter = 0;
-
-// ============================================================
-// Atomic accessors
-// ============================================================
-
-static inline hci_con_handle_t get_bt_handle(void) {
-    hci_con_handle_t h;
-    taskENTER_CRITICAL(&state_mux);
-    h = bt_handle;
-    taskEXIT_CRITICAL(&state_mux);
-    return h;
-}
 
 // ============================================================
 // Helpers & NVS
@@ -203,32 +176,6 @@ static void update_nat(void) {
 // Watchdog & Heartbeat
 // ============================================================
 
-/* FIX: gap_read_rssi must run in BTstack context.
- * btstack_run_loop_execute_on_main_thread takes a
- * btstack_context_callback_registration_t *, not a bare function pointer.
- * We keep a static registration struct and reuse it each heartbeat.
- * The struct must stay alive until the callback fires — static is safe. */
-static volatile bool rssi_poll_pending = false;
-
-static void rssi_poll_cb(void *context) {
-    (void)context;
-    hci_con_handle_t h = get_bt_handle();
-    if (h != HCI_CON_HANDLE_INVALID) gap_read_rssi(h);
-    rssi_poll_pending = false;
-}
-
-static btstack_context_callback_registration_t rssi_cb_reg = {
-    .callback = rssi_poll_cb,
-    .context  = NULL,
-};
-
-static void request_rssi_poll(void) {
-    if (!rssi_poll_pending) {
-        rssi_poll_pending = true;
-        btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
-    }
-}
-
 static void watchdog_task(void *arg) {
     (void)arg;
     vTaskDelay(pdMS_TO_TICKS(10000));
@@ -255,7 +202,7 @@ static void watchdog_task(void *arg) {
         }
 
         /* FIX: schedule BT RSSI poll in BTstack's own thread */
-        request_rssi_poll();
+        bt_pan_request_rssi_poll();
 
         uint32_t up = uptime_seconds();
         ESP_LOGI(TAG,
@@ -422,7 +369,7 @@ static esp_err_t handler_root(httpd_req_t *req) {
     //     btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
     // }
     if (get_bt_connected()) {
-        request_rssi_poll();
+        bt_pan_request_rssi_poll();
     }
 
     app_state_t st    = app_state_get();
@@ -582,201 +529,6 @@ static void http_server_start(void) {
     }
 }
 
-// ============================================================
-// Bluetooth / BTstack
-// ============================================================
-
-static void bt_set_visible(bool v) {
-    gap_discoverable_control(v ? 1 : 0);
-    gap_connectable_control(v ? 1 : 0);
-    ESP_LOGI(TAG, "[BT] %s", v ? "visible" : "hidden");
-}
-
-static void bt_reopen_task(void *arg) {
-    (void)arg;
-    ESP_LOGW(TAG, "[BTR] started, heap=%u",
-             heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
-    vTaskDelay(pdMS_TO_TICKS(BT_REOPEN_DELAY_MS));
-
-    if (!get_bt_connected()) bt_set_visible(true);
-
-    taskENTER_CRITICAL(&state_mux);
-    bt_reopen_running = false;
-    taskEXIT_CRITICAL(&state_mux);
-    vTaskDelete(NULL);
-}
-
-/* FIX: one-at-a-time wifi_start_task */
-static void wifi_start_task(void *arg) {
-    (void)arg;
-    wifi_manager_start_connect();
-    taskENTER_CRITICAL(&state_mux);
-    wifi_start_running = false;
-    taskEXIT_CRITICAL(&state_mux);
-    vTaskDelete(NULL);
-}
-
-static void hci_packet_handler(uint8_t type, uint16_t ch,
-                                uint8_t *pkt, uint16_t sz) {
-    if (type != HCI_EVENT_PACKET) return;
-    bd_addr_t addr;
-    switch (hci_event_packet_get_type(pkt)) {
-        case HCI_EVENT_CONNECTION_REQUEST:
-            hci_event_connection_request_get_bd_addr(pkt, addr);
-            ESP_LOGI(TAG,
-                "[HCI] Connection request from %02X:%02X:%02X:%02X:%02X:%02X",
-                addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-            break;
-        case HCI_EVENT_CONNECTION_COMPLETE:
-            hci_event_connection_complete_get_bd_addr(pkt, addr);
-            ESP_LOGI(TAG,
-                "[HCI] Connection complete status=0x%02x addr=%02X:%02X:%02X:%02X:%02X:%02X",
-                hci_event_connection_complete_get_status(pkt),
-                addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-            break;
-        case HCI_EVENT_DISCONNECTION_COMPLETE:
-            ESP_LOGI(TAG,
-                "[HCI] Disconnected handle=0x%04x reason=0x%02x",
-                hci_event_disconnection_complete_get_connection_handle(pkt),
-                hci_event_disconnection_complete_get_reason(pkt));
-            break;
-        case GAP_EVENT_RSSI_MEASUREMENT:
-            if (gap_event_rssi_measurement_get_con_handle(pkt) == get_bt_handle()) {
-                set_bt_rssi(gap_event_rssi_measurement_get_rssi(pkt));
-            }
-            break;
-        case HCI_EVENT_PIN_CODE_REQUEST:
-            hci_event_pin_code_request_get_bd_addr(pkt, addr);
-            gap_pin_code_response(addr, BT_LEGACY_PIN);
-            break;
-        case HCI_EVENT_USER_CONFIRMATION_REQUEST:
-            hci_event_user_confirmation_request_get_bd_addr(pkt, addr);
-            gap_ssp_confirmation_response(addr);
-            break;
-        default: break;
-    }
-}
-
-static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
-                                      uint8_t *pkt, uint16_t sz) {
-    if (type != HCI_EVENT_PACKET) return;
-    bd_addr_t addr;
-    switch (hci_event_packet_get_type(pkt)) {
-
-        case BNEP_EVENT_CHANNEL_OPENED: {
-            if (bnep_event_channel_opened_get_status(pkt)) {
-                ESP_LOGI(TAG, "[BT] BNEP open failed status=0x%02x",
-                         bnep_event_channel_opened_get_status(pkt));
-                break;
-            }
-            bnep_event_channel_opened_get_remote_address(pkt, addr);
-            hci_con_handle_t h = bnep_event_channel_opened_get_con_handle(pkt);
-
-            if (get_bt_connected()) {
-                bnep_disconnect(addr);
-                return;
-            }
-            set_bt_connected(true);
-
-            bool has_ssid = wifi_manager_has_credentials();
-
-            taskENTER_CRITICAL(&state_mux);
-            bt_handle    = h;
-            bool can_start = !wifi_start_running;
-            if (can_start && !has_ssid) wifi_start_running = true;
-            taskEXIT_CRITICAL(&state_mux);
-
-            bool wc = get_wifi_connected();
-            if (can_start && !wc && has_ssid) {
-                taskENTER_CRITICAL(&state_mux);
-                wifi_start_running = true;
-                taskEXIT_CRITICAL(&state_mux);
-            }
-
-            ESP_LOGI(TAG, "[BT] BNEP channel opened");
-            bt_set_visible(false);
-
-            /* Poll RSSI immediately, don't wait for the next heartbeat cycle */
-            //btstack_run_loop_execute_on_main_thread(&rssi_cb_reg);
-            /* FIX: schedule BT RSSI poll in BTstack's own thread */
-            request_rssi_poll();
-
-            if (wc) {
-                app_state_set(APP_BRIDGE);
-            } else if (!has_ssid) {
-                app_state_set(APP_NO_WIFI);
-                set_wifi_rssi(-100);
-            } else if (can_start) {
-                /* FIX: use guarded flag set above */
-                safe_task_create(wifi_start_task, "wist", 3072, NULL, 5, NULL);
-            }
-            update_nat();
-            break;
-        }
-
-        case BNEP_EVENT_CHANNEL_CLOSED: {
-            set_bt_connected(false);
-            set_bt_rssi(-100);
-
-            taskENTER_CRITICAL(&state_mux);
-            bt_handle    = HCI_CON_HANDLE_INVALID;
-            bool already  = bt_reopen_running;
-            if (!already) bt_reopen_running = true;
-            taskEXIT_CRITICAL(&state_mux);
-
-            app_state_set(APP_WAIT_BT);
-
-            if (!already) {
-                bt_reopen_counter++;
-                ESP_LOGW(TAG, "[BTR] create #%d heap=%u",
-                         bt_reopen_counter,
-                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
-                safe_task_create(bt_reopen_task, "btr", 4096, NULL, 4, NULL);
-            } else {
-                ESP_LOGW(TAG, "[BTR] already running, skip create");
-            }
-
-            update_nat();
-            break;
-        }
-
-        default: break;
-    }
-}
-
-static void pan_setup(void) {
-    gap_set_local_name("Satura Bridge");
-    gap_discoverable_control(1);
-    gap_connectable_control(1);
-    gap_set_class_of_device(0x020302);
-    gap_ssp_set_io_capability(SSP_IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
-    gap_set_security_level(LEVEL_0);
-
-    hci_event_cb.callback = &hci_packet_handler;
-    hci_add_event_handler(&hci_event_cb);
-
-#if defined(L2CAP_SET_MAX_MTU)
-    l2cap_set_max_mtu(1691);
-#endif
-    l2cap_init();
-
-    bnep_init();
-    sdp_init();
-
-    memset(pan_sdp_record, 0, sizeof(pan_sdp_record));
-    uint16_t net_types[] = {0x0800, 0x0806, 0};
-    pan_create_nap_sdp_record(pan_sdp_record,
-                              sdp_create_service_record_handle(),
-                              net_types, NULL, NULL, BNEP_SECURITY_NONE,
-                              PAN_NET_ACCESS_TYPE_OTHER, 128000,
-                              "SaturaBridge", "BT PAN WiFi Bridge");
-    sdp_register_service(pan_sdp_record);
-
-    bnep_lwip_init();
-    bnep_lwip_register_service(BLUETOOTH_SERVICE_CLASS_NAP, 1691);
-    bnep_lwip_register_packet_handler(bnep_lwip_packet_handler);
-}
-
 static dhcp_entry_t dhcp_entries[NUM_DHCP_ENTRY] = {
     { {0}, {GW_IP0, GW_IP1, GW_IP2, 2}, {255,255,255,0}, 24*60*60 },
     { {0}, {GW_IP0, GW_IP1, GW_IP2, 3}, {255,255,255,0}, 24*60*60 },
@@ -806,6 +558,7 @@ int btstack_main(int argc, const char *argv[]) {
     }
 
     wifi_manager_set_state_change_cb(update_nat);
+    bt_pan_set_state_change_cb(update_nat);
     wifi_manager_init();
 
     wifi_manager_load_saved_credentials();
@@ -822,8 +575,8 @@ int btstack_main(int argc, const char *argv[]) {
     safe_task_create(watchdog_task, "wdt", 4096, NULL, 2, NULL);
 
     http_server_start();
-    pan_setup();
-    hci_power_control(HCI_POWER_ON);
+    bt_pan_init();
+    bt_pan_start();
 
     return 0;
 }

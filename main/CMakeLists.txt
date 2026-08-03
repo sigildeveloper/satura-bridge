@@ -7,6 +7,7 @@ idf_component_register(
         "http_utils.c"
         "app_state.c"
         "wifi_manager.c"
+        "bt_pan.c"
 
     INCLUDE_DIRS "."
 
