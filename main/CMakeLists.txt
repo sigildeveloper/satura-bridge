@@ -8,6 +8,8 @@ idf_component_register(
         "app_state.c"
         "wifi_manager.c"
         "bt_pan.c"
+        "uptime.c"
+        "http_server.c"
 
     INCLUDE_DIRS "."
 
