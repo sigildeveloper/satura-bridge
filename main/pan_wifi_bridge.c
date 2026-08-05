@@ -26,11 +26,7 @@
 
 #include <errno.h>
 
-#include "lwip/lwip_napt.h"
-#include "lwip/netif.h"
-#include "lwip/ip4_addr.h"
 #include "dhserver.h"
-#include "lwip/tcpip.h"
 
 #include "esp_wifi.h"
 #include "nvs_flash.h"
@@ -50,6 +46,7 @@
 #include "http_server.h"
 #include "uptime.h"
 #include "esp_timer.h"
+#include "nat_bridge.h"
 
 static const char *TAG = "satura_bridge";
 
@@ -81,48 +78,6 @@ void safe_task_create(TaskFunction_t fn, const char *name,
         vTaskDelay(pdMS_TO_TICKS(200));
         esp_restart();
     }
-}
-
-
-// ============================================================
-// NAT & Network
-// ============================================================
-
-static struct netif *bt_netif = NULL;
-
-static void find_bt_netif(void) {
-    struct netif *p = netif_list;
-    while (p) {
-        const ip4_addr_t *ip = netif_ip4_addr(p);
-        if (ip4_addr1(ip) == GW_IP0 &&
-            ip4_addr2(ip) == GW_IP1 &&
-            ip4_addr3(ip) == GW_IP2) {
-            bt_netif = p;
-            return;
-        }
-        p = p->next;
-    }
-}
-
-static void update_nat_lwip_ctx(void *arg) {
-    (void)arg;
-    if (!bt_netif) find_bt_netif();
-    if (!bt_netif) {
-        struct netif *p = netif_list;
-        while (p) {
-            ESP_LOGW(TAG, "  netif: %d.%d.%d.%d",
-                ip4_addr1(netif_ip4_addr(p)), ip4_addr2(netif_ip4_addr(p)),
-                ip4_addr3(netif_ip4_addr(p)), ip4_addr4(netif_ip4_addr(p)));
-            p = p->next;
-        }
-        return;
-    }
-    bool enable = get_bt_connected() && get_wifi_connected();
-    ip_napt_enable_netif(bt_netif, enable ? 1 : 0);
-}
-
-static void update_nat(void) {
-    tcpip_callback(update_nat_lwip_ctx, NULL);
 }
 
 // ============================================================
@@ -234,8 +189,8 @@ int btstack_main(int argc, const char *argv[]) {
         nvs_flash_init();
     }
 
-    wifi_manager_set_state_change_cb(update_nat);
-    bt_pan_set_state_change_cb(update_nat);
+    wifi_manager_set_state_change_cb(nat_bridge_update);
+    bt_pan_set_state_change_cb(nat_bridge_update);
     wifi_manager_init();
 
     wifi_manager_load_saved_credentials();

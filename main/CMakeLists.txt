@@ -10,6 +10,7 @@ idf_component_register(
         "bt_pan.c"
         "uptime.c"
         "http_server.c"
+        "nat_bridge.c"
 
     INCLUDE_DIRS "."
 
