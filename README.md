@@ -5,7 +5,7 @@
 Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.9-green.svg)](firmware/)
+[![Version](https://img.shields.io/badge/version-v0.0.10-green.svg)](firmware/)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
@@ -181,6 +181,7 @@ Useful information to include:
 - [x] Automatic Wi-Fi connection
 - [x] Connection recovery
 - [x] Watchdog and recovery mechanisms
+- [x] Modular codebase refactor
 - [ ] Test more Nokia Symbian devices
 - [ ] Test more Sony Ericsson devices
 - [ ] Improve compatibility with older phones
@@ -210,12 +211,22 @@ Components are pulled automatically via `idf_component.yml`.
 ```text
 satura-bridge/
 ├── main/
-│   ├── pan_wifi_bridge.c        # Core gateway logic
+│   ├── pan_wifi_bridge.c        # Core coordination (NAT trigger, watchdog, entry glue)
 │   ├── main.c                   # Entry point
+│   ├── app_state.c/.h           # Bridge state machine
+│   ├── wifi_manager.c/.h        # Wi-Fi connect, retry, recovery
+│   ├── bt_pan.c/.h              # Bluetooth PAN / BNEP handling
+│   ├── nat_bridge.c/.h          # NAT between BT and Wi-Fi interfaces
+│   ├── dns_server.c/.h          # DNS server with caching and captive replies
+│   ├── http_server.c/.h         # Web interface (setup, status, captive portal)
+│   ├── nvs_storage.c/.h         # Wi-Fi credential persistence
+│   ├── http_utils.c/.h          # Shared HTTP helpers
+│   ├── uptime.c/.h              # Uptime tracking
+│   ├── config.h                 # Shared constants
 │   └── btstack_config.h         # BTstack configuration
 ├── components/                  # BTstack and dependencies
 ├── firmware/
-│   └── satura_bridge_v0.0.9.bin # Prebuilt firmware
+│   └── satura-bridge-v0.0.10.bin # Prebuilt firmware
 ├── sdkconfig.defaults           # Build configuration
 ├── FLASH.md                     # Flashing instructions
 └── README.md
@@ -434,6 +445,7 @@ Satura Bridge в первую очередь рассчитан на стары�
 - [x] Автоматическое подключение к Wi-Fi
 - [x] Восстановление соединения
 - [x] Watchdog и механизмы восстановления
+- [x] Модульный рефакторинг кодовой базы
 - [ ] Протестировать больше устройств Nokia на Symbian
 - [ ] Протестировать больше устройств Sony Ericsson
 - [ ] Улучшить совместимость со старыми телефонами
@@ -463,12 +475,22 @@ idf.py flash monitor
 ```text
 satura-bridge/
 ├── main/
-│   ├── pan_wifi_bridge.c        # Основная логика шлюза
+│   ├── pan_wifi_bridge.c        # Координация (запуск NAT, watchdog, точка сборки)
 │   ├── main.c                   # Точка входа
+│   ├── app_state.c/.h           # Конечный автомат состояния моста
+│   ├── wifi_manager.c/.h        # Подключение, повторы, восстановление Wi-Fi
+│   ├── bt_pan.c/.h              # Обработка Bluetooth PAN / BNEP
+│   ├── nat_bridge.c/.h          # NAT между интерфейсами BT и Wi-Fi
+│   ├── dns_server.c/.h          # DNS-сервер с кэшем и captive-ответами
+│   ├── http_server.c/.h         # Веб-интерфейс (настройка, статус, captive portal)
+│   ├── nvs_storage.c/.h         # Сохранение Wi-Fi данных
+│   ├── http_utils.c/.h          # Общие HTTP-хелперы
+│   ├── uptime.c/.h              # Учёт времени работы
+│   ├── config.h                 # Общие константы
 │   └── btstack_config.h         # Конфигурация BTstack
 ├── components/                  # BTstack и зависимости
 ├── firmware/
-│   └── satura_bridge_v0.0.9.bin # Готовая прошивка
+│   └── satura-bridge-v0.0.10.bin # Готовая прошивка
 ├── sdkconfig.defaults           # Конфигурация сборки
 ├── FLASH.md                     # Инструкция по прошивке
 └── README.md
