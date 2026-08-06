@@ -67,7 +67,7 @@ static const char *TAG = "satura_bridge";
 static void watchdog_task(void *arg);
 
 // ============================================================
-// Helpers & NVS
+// Helpers
 // ============================================================
 
 void safe_task_create(TaskFunction_t fn, const char *name,
@@ -124,11 +124,10 @@ static void watchdog_task(void *arg) {
             up / 86400, (up % 86400) / 3600, (up % 3600) / 60, up % 60);
 
         // /* Принудительная очистка устаревших NAPT записей при низком heap */
-        // if (free_heap < 32768) {   /* < 32KB — начинаем чистить */
-        //     ip_napt_gc();           /* если есть в твоей сборке lwip_napt */
+        // if (free_heap < 32768) {
+        //     ip_napt_gc();           
         // }
 
-        /* WiFi stuck watchdog */
         /* WiFi stuck watchdog */
         if (st == APP_BRIDGE_NO_WIFI) {
             if (++wifi_stuck_count >= 10) {
@@ -158,7 +157,7 @@ static void watchdog_task(void *arg) {
 }
 
 // ============================================================
-// HTTP Server
+// DHCP Config
 // ============================================================
 
 static dhcp_entry_t dhcp_entries[NUM_DHCP_ENTRY] = {
