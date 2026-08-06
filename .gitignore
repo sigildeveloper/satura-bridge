@@ -13,6 +13,8 @@ dependencies.lock
 *.gcno
 *.gcda
 *.gcov
+*.bin
+!firmware/*.bin
 
 # IDE
 .vscode/
