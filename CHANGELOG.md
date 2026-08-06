@@ -24,3 +24,10 @@
 - One Bluetooth PAN client at a time
 - Windows 10 Internet connectivity is not supported
 - Compatibility with individual devices may vary
+
+## [0.0.10] - 2026-08-06
+
+Internal refactor: split the monolithic pan_wifi_bridge.c
+into focused modules - dns_server, nvs_storage, http_utils, app_state,
+wifi_manager, bt_pan, http_server, uptime, nat_bridge. No functional
+changes; existing behavior verified on real hardware (Sony Ericsson J108).
