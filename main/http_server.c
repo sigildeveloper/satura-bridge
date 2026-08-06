@@ -15,7 +15,7 @@
 #include "task_utils.h"
 #include "uptime.h"
 
-#define PROJECT_VERSION "v0.0.9"
+#define PROJECT_VERSION "v0.0.10"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
 #define PAGE_FOOTER \
     "<hr><p>" \
