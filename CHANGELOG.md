@@ -31,3 +31,39 @@ Internal refactor: split the monolithic pan_wifi_bridge.c
 into focused modules - dns_server, nvs_storage, http_utils, app_state,
 wifi_manager, bt_pan, http_server, uptime, nat_bridge. No functional
 changes; existing behavior verified on real hardware (Sony Ericsson J108).
+
+## [0.0.11] - 2026-08-07
+
+### Multiple Wi-Fi Networks
+
+Satura Bridge can now store and manage multiple Wi-Fi networks instead of relying on a single saved network.
+
+### What's new
+
+* **Up to 6 saved Wi-Fi networks**
+* **Wi-Fi network scanning** directly from the web interface
+* **Automatic network selection** based on visible networks and signal strength (RSSI)
+* **Automatic fallback** — if the preferred network cannot be connected to, Satura Bridge tries the next available saved network
+* New **`/networks`** page for managing saved networks
+
+  * Scan for nearby Wi-Fi networks
+  * Add networks
+  * Connect to a scanned network
+  * Remove saved networks
+  * View signal strength
+* `/setup` remains available for **manual Wi-Fi configuration**
+* `/reset` now clears **all saved Wi-Fi networks**
+
+### Reliability & Fixes
+
+* Fixed a potential **stack buffer overflow** when loading saved networks from NVS
+* Increased the HTTP server URI handler limit to support the expanded web interface
+* Added URL encoding/decoding and HTML escaping for Wi-Fi SSIDs
+* Improved connection flow and status reporting when trying multiple networks
+
+### Firmware
+
+* Added prebuilt `satura-bridge-v0.0.11.bin`
+* Updated firmware and documentation version references
+
+This release builds on the modular codebase introduced in v0.0.10 and adds a more practical Wi-Fi management system for devices that may move between multiple networks.
