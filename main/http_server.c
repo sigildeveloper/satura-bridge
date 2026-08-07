@@ -16,7 +16,7 @@
 #include "uptime.h"
 #include "nvs_storage.h"
 
-#define PROJECT_VERSION "v0.0.10"
+#define PROJECT_VERSION "v0.0.11"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
 #define PAGE_FOOTER \
     "<hr><p>" \

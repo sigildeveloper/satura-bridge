@@ -5,7 +5,7 @@
 Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.10-green.svg)](firmware/)
+[![Version](https://img.shields.io/badge/version-v0.0.11-green.svg)](firmware/)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
@@ -58,6 +58,7 @@ Satura Bridge is currently focused on devices that support Bluetooth PAN / NAP. 
 - Web-based configuration interface
 - Captive portal-style setup
 - Automatic connection to saved Wi-Fi on boot
+- Support for up to 6 saved Wi-Fi networks, connecting to the strongest visible one
 - Automatic connection recovery
 - Watchdog that can restart hung components without rebooting the entire device
 - Single-file firmware flashing
@@ -118,8 +119,9 @@ It can be accessed while a phone is connected to Satura Bridge over Bluetooth.
 | Page | Description |
 |---|---|
 | `/` | Status, RSSI, uptime, heap information |
-| `/setup` | Configure Wi-Fi |
-| `/reset` | Forget the saved Wi-Fi network |
+| `/setup` | Configure Wi-Fi manually |
+| `/networks` | Scan, add, and remove saved Wi-Fi networks |
+| `/reset` | Forget all saved Wi-Fi networks |
 | `/reboot` | Reboot the device |
 
 ---
@@ -182,6 +184,7 @@ Useful information to include:
 - [x] Connection recovery
 - [x] Watchdog and recovery mechanisms
 - [x] Modular codebase refactor
+- [x] Multiple saved Wi-Fi networks with scan-and-connect UI
 - [ ] Test more Nokia Symbian devices
 - [ ] Test more Sony Ericsson devices
 - [ ] Improve compatibility with older phones
@@ -226,7 +229,7 @@ satura-bridge/
 │   └── btstack_config.h         # BTstack configuration
 ├── components/                  # BTstack and dependencies
 ├── firmware/
-│   └── satura-bridge-v0.0.10.bin # Prebuilt firmware
+│   └── satura-bridge-v0.0.11.bin # Prebuilt firmware
 ├── sdkconfig.defaults           # Build configuration
 ├── FLASH.md                     # Flashing instructions
 └── README.md
@@ -322,6 +325,7 @@ Satura Bridge в первую очередь рассчитан на устро�
 - Веб-интерфейс настройки
 - Captive portal для первоначальной настройки
 - Автоматическое подключение к сохранённой Wi-Fi сети после включения
+- Поддержка до 6 сохранённых Wi-Fi сетей с подключением к сети с самым сильным сигналом
 - Автоматическое восстановление соединения
 - Watchdog, способный перезапускать зависшие компоненты без полной перезагрузки устройства
 - Прошивка одним файлом
@@ -382,8 +386,9 @@ Satura Bridge в первую очередь рассчитан на устро�
 | Страница | Описание |
 |---|---|
 | `/` | Статус, RSSI, время работы, информация о heap |
-| `/setup` | Настройка Wi-Fi |
-| `/reset` | Удаление сохранённой Wi-Fi сети |
+| `/setup` | Настройка Wi-Fi вручную |
+| `/networks` | Сканирование, добавление и удаление сохранённых Wi-Fi сетей |
+| `/reset` | Удаление всех сохранённых Wi-Fi сетей |
 | `/reboot` | Перезагрузка устройства |
 
 ---
@@ -446,6 +451,7 @@ Satura Bridge в первую очередь рассчитан на стары�
 - [x] Восстановление соединения
 - [x] Watchdog и механизмы восстановления
 - [x] Модульный рефакторинг кодовой базы
+- [x] Несколько сохранённых Wi-Fi сетей с UI сканирования и подключения
 - [ ] Протестировать больше устройств Nokia на Symbian
 - [ ] Протестировать больше устройств Sony Ericsson
 - [ ] Улучшить совместимость со старыми телефонами
@@ -490,7 +496,7 @@ satura-bridge/
 │   └── btstack_config.h         # Конфигурация BTstack
 ├── components/                  # BTstack и зависимости
 ├── firmware/
-│   └── satura-bridge-v0.0.10.bin # Готовая прошивка
+│   └── satura-bridge-v0.0.11.bin # Готовая прошивка
 ├── sdkconfig.defaults           # Конфигурация сборки
 ├── FLASH.md                     # Инструкция по прошивке
 └── README.md
