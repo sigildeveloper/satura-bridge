@@ -26,3 +26,22 @@ int wifi_manager_get_max_retries(void);
 
 typedef void (*wifi_manager_state_cb_t)(void);
 void wifi_manager_set_state_change_cb(wifi_manager_state_cb_t cb);
+
+#include "nvs_storage.h"
+
+#define WIFI_MAX_SCAN_RESULTS 20
+
+typedef struct {
+    char    ssid[33];
+    int8_t  rssi;
+    bool    saved;   /* true if this SSID is already in the saved list */
+} wifi_scan_result_t;
+
+void wifi_manager_scan_start(void);
+int  wifi_manager_get_scan_results(wifi_scan_result_t *out, int max_count);
+bool wifi_manager_scan_in_progress(void);
+
+/* Multi-network management */
+int  wifi_manager_get_saved_networks(wifi_network_t *out, int max_count);
+bool wifi_manager_add_network(const char *ssid, const char *pass);
+bool wifi_manager_remove_network(int index);

@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include <string.h>
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -17,6 +19,20 @@ static const char *TAG = "wifi_mgr";
 #define WIFI_MAX_RETRIES     7
 #define WIFI_RETRY_BASE_MS   1000
 #define WIFI_RETRY_MAX_MS    30000
+
+#define WIFI_SCAN_TIMEOUT_MS 5000
+
+static volatile bool scan_in_progress = false;
+static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
+static int scan_result_count = 0;
+static portMUX_TYPE scan_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/* Index into the saved-network list currently being attempted, and the
+ * ranked candidate list built from scan + saved networks */
+static wifi_network_t candidate_list[WIFI_MAX_SAVED_NETWORKS];
+static int candidate_rssi[WIFI_MAX_SAVED_NETWORKS];
+static int candidate_count = 0;
+static int candidate_index = 0;
 
 static portMUX_TYPE wifi_mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -44,36 +60,30 @@ static void wifi_soft_reset(void);
 static void wifi_event_handler(void *arg, esp_event_base_t base,
                                 int32_t id, void *data);
 
+static void process_scan_results(void);
+static void build_candidate_list(void);
+
 /* ============================================================
  * Credentials
  * ============================================================ */
 
 void wifi_manager_set_credentials(const char *ssid, const char *pass) {
-    taskENTER_CRITICAL(&wifi_mux);
-    strncpy(wifi_ssid, ssid, sizeof(wifi_ssid) - 1);
-    strncpy(wifi_pass, pass, sizeof(wifi_pass) - 1);
-    taskEXIT_CRITICAL(&wifi_mux);
-    nvs_storage_save(wifi_ssid, wifi_pass);
+    nvs_storage_add_network(ssid, pass);
 }
 
 void wifi_manager_clear_credentials(void) {
-    taskENTER_CRITICAL(&wifi_mux);
-    memset(wifi_ssid, 0, sizeof(wifi_ssid));
-    memset(wifi_pass, 0, sizeof(wifi_pass));
-    taskEXIT_CRITICAL(&wifi_mux);
-    nvs_storage_clear();
+    nvs_storage_clear_networks();
     esp_wifi_disconnect();
 }
 
 bool wifi_manager_has_credentials(void) {
-    taskENTER_CRITICAL(&wifi_mux);
-    bool has = (strlen(wifi_ssid) != 0);
-    taskEXIT_CRITICAL(&wifi_mux);
-    return has;
+    wifi_network_t tmp[1];
+    return nvs_storage_load_networks(tmp, 1) > 0;
 }
 
 void wifi_manager_load_saved_credentials(void) {
-    nvs_storage_load(wifi_ssid, sizeof(wifi_ssid), wifi_pass, sizeof(wifi_pass));
+    /* No-op now — networks are read on-demand from NVS via
+     * wifi_manager_has_credentials() / build_candidate_list(). */
 }
 
 void wifi_manager_get_ssid(char *out, size_t len) {
@@ -93,13 +103,17 @@ void wifi_manager_get_ip(char *out, size_t len) {
 int wifi_manager_get_retries(void) {
     int r;
     taskENTER_CRITICAL(&wifi_mux);
-    r = wifi_retries;
+    r = candidate_index;
     taskEXIT_CRITICAL(&wifi_mux);
     return r;
 }
 
 int wifi_manager_get_max_retries(void) {
-    return WIFI_MAX_RETRIES;
+    int c;
+    taskENTER_CRITICAL(&wifi_mux);
+    c = candidate_count > 0 ? candidate_count : 1;
+    taskEXIT_CRITICAL(&wifi_mux);
+    return c;
 }
 
 esp_netif_t *wifi_manager_get_sta_netif(void) {
@@ -114,29 +128,63 @@ void wifi_manager_set_state_change_cb(wifi_manager_state_cb_t cb) {
  * Connect / retry
  * ============================================================ */
 
-void wifi_manager_start_connect(void) {
+static void try_connect_candidate(int idx) {
+    if (idx < 0 || idx >= candidate_count) {
+        ESP_LOGW(TAG, "[WIFI] no more candidates, giving up");
+        app_state_set(APP_WIFI_FAILED);
+        return;
+    }
+
     wifi_config_t cfg = {0};
-
-    taskENTER_CRITICAL(&wifi_mux);
-    strncpy((char *)cfg.sta.ssid,     wifi_ssid, sizeof(cfg.sta.ssid)     - 1);
-    strncpy((char *)cfg.sta.password, wifi_pass, sizeof(cfg.sta.password) - 1);
-    bool has_pass = (strlen(wifi_pass) != 0);
-    taskEXIT_CRITICAL(&wifi_mux);
-
+    strncpy((char *)cfg.sta.ssid, candidate_list[idx].ssid, sizeof(cfg.sta.ssid) - 1);
+    strncpy((char *)cfg.sta.password, candidate_list[idx].pass, sizeof(cfg.sta.password) - 1);
+    bool has_pass = (strlen(candidate_list[idx].pass) != 0);
     cfg.sta.threshold.authmode = has_pass ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     cfg.sta.scan_method = WIFI_FAST_SCAN;
     cfg.sta.pmf_cfg.capable  = true;
     cfg.sta.pmf_cfg.required = false;
     esp_wifi_set_config(WIFI_IF_STA, &cfg);
 
-    app_state_set(APP_WIFI_CONNECTING);
+    taskENTER_CRITICAL(&wifi_mux);
+    strncpy(wifi_ssid, candidate_list[idx].ssid, sizeof(wifi_ssid) - 1);
+    strncpy(wifi_pass, candidate_list[idx].pass, sizeof(wifi_pass) - 1);
+    taskEXIT_CRITICAL(&wifi_mux);
+
+    ESP_LOGI(TAG, "[WIFI] trying candidate %d/%d: %s (rssi %d)",
+             idx + 1, candidate_count, candidate_list[idx].ssid, candidate_rssi[idx]);
+
+    esp_wifi_connect();
+}
+
+static void wifi_connect_flow_task(void *arg) {
+    (void)arg;
+
+    wifi_scan_config_t scan_cfg = {0};
+    esp_wifi_scan_start(&scan_cfg, true);
+    process_scan_results();
+    scan_in_progress = false;
+
+    build_candidate_list();
 
     taskENTER_CRITICAL(&wifi_mux);
     wifi_retries        = 0;
     wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
     taskEXIT_CRITICAL(&wifi_mux);
 
-    esp_wifi_connect();
+    if (candidate_count == 0) {
+        ESP_LOGW(TAG, "[WIFI] no saved networks visible");
+        app_state_set(APP_WIFI_FAILED);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    try_connect_candidate(candidate_index);
+    vTaskDelete(NULL);
+}
+
+void wifi_manager_start_connect(void) {
+    app_state_set(APP_WIFI_CONNECTING);
+    safe_task_create(wifi_connect_flow_task, "wifi_conn", 4096, NULL, 5, NULL);
 }
 
 static void wifi_schedule_retry(uint32_t delay_ms) {
@@ -200,16 +248,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         taskEXIT_CRITICAL(&wifi_mux);
 
         if (st == APP_WIFI_CONNECTING) {
-            taskENTER_CRITICAL(&wifi_mux);
-            int retries  = ++wifi_retries;
-            uint32_t delay = wifi_retry_delay_ms;
-            wifi_retry_delay_ms = (delay * 2 > WIFI_RETRY_MAX_MS)
-                                  ? WIFI_RETRY_MAX_MS : delay * 2;
-            taskEXIT_CRITICAL(&wifi_mux);
-
-            if (retries < WIFI_MAX_RETRIES) {
-                wifi_schedule_retry(delay);
+            candidate_index++;
+            if (candidate_index < candidate_count) {
+                /* Try next candidate immediately, no delay needed —
+                    * we're just moving to a different already-scanned network */
+                try_connect_candidate(candidate_index);
             } else {
+                ESP_LOGW(TAG, "[WIFI] exhausted all %d candidate(s)", candidate_count);
                 app_state_set(APP_WIFI_FAILED);
             }
 
@@ -342,6 +387,157 @@ static void wifi_recovery_task(void *arg) {
     wifi_recovery_running = false;
     taskEXIT_CRITICAL(&wifi_mux);
     vTaskDelete(NULL);
+}
+
+/* ============================================================
+ * Multi-network management
+ * ============================================================ */
+
+int wifi_manager_get_saved_networks(wifi_network_t *out, int max_count) {
+    return nvs_storage_load_networks(out, max_count);
+}
+
+bool wifi_manager_add_network(const char *ssid, const char *pass) {
+    return nvs_storage_add_network(ssid, pass);
+}
+
+bool wifi_manager_remove_network(int index) {
+    return nvs_storage_remove_network(index);
+}
+
+/* ============================================================
+ * Scanning
+ * ============================================================ */
+
+bool wifi_manager_scan_in_progress(void) {
+    return scan_in_progress;
+}
+
+int wifi_manager_get_scan_results(wifi_scan_result_t *out, int max_count) {
+    int n;
+    taskENTER_CRITICAL(&scan_mux);
+    n = scan_result_count;
+    if (n > max_count) n = max_count;
+    memcpy(out, scan_results, sizeof(wifi_scan_result_t) * n);
+    taskEXIT_CRITICAL(&scan_mux);
+    return n;
+}
+
+static void process_scan_results(void) {
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+    if (ap_count == 0) {
+        taskENTER_CRITICAL(&scan_mux);
+        scan_result_count = 0;
+        taskEXIT_CRITICAL(&scan_mux);
+        return;
+    }
+    if (ap_count > 32) ap_count = 32; /* sanity cap for the temp buffer */
+
+    wifi_ap_record_t *records = malloc(sizeof(wifi_ap_record_t) * ap_count);
+    if (!records) return;
+
+    uint16_t actual = ap_count;
+    if (esp_wifi_scan_get_ap_records(&actual, records) != ESP_OK) {
+        free(records);
+        return;
+    }
+
+    wifi_network_t saved[WIFI_MAX_SAVED_NETWORKS];
+    int saved_count = nvs_storage_load_networks(saved, WIFI_MAX_SAVED_NETWORKS);
+
+    taskENTER_CRITICAL(&scan_mux);
+    scan_result_count = 0;
+    for (int i = 0; i < actual && scan_result_count < WIFI_MAX_SCAN_RESULTS; i++) {
+        /* Deduplicate by SSID, keep strongest RSSI */
+        bool dup = false;
+        for (int j = 0; j < scan_result_count; j++) {
+            if (strcmp(scan_results[j].ssid, (char *)records[i].ssid) == 0) {
+                dup = true;
+                if (records[i].rssi > scan_results[j].rssi)
+                    scan_results[j].rssi = records[i].rssi;
+                break;
+            }
+        }
+        if (dup) continue;
+
+        strncpy(scan_results[scan_result_count].ssid,
+                (char *)records[i].ssid, sizeof(scan_results[0].ssid) - 1);
+        scan_results[scan_result_count].ssid[sizeof(scan_results[0].ssid) - 1] = '\0';
+        scan_results[scan_result_count].rssi = records[i].rssi;
+
+        bool is_saved = false;
+        for (int k = 0; k < saved_count; k++) {
+            if (strcmp(saved[k].ssid, (char *)records[i].ssid) == 0) {
+                is_saved = true;
+                break;
+            }
+        }
+        scan_results[scan_result_count].saved = is_saved;
+        scan_result_count++;
+    }
+    taskEXIT_CRITICAL(&scan_mux);
+
+    free(records);
+}
+
+/* Build a ranked candidate list: saved networks that are currently
+ * visible, sorted by descending RSSI. Called right before we start
+ * trying to connect. */
+static void build_candidate_list(void) {
+    wifi_network_t saved[WIFI_MAX_SAVED_NETWORKS];
+    int saved_count = nvs_storage_load_networks(saved, WIFI_MAX_SAVED_NETWORKS);
+
+    candidate_count = 0;
+
+    taskENTER_CRITICAL(&scan_mux);
+    for (int i = 0; i < saved_count; i++) {
+        int best_rssi = -127;
+        bool visible = false;
+        for (int j = 0; j < scan_result_count; j++) {
+            if (strcmp(saved[i].ssid, scan_results[j].ssid) == 0) {
+                visible = true;
+                if (scan_results[j].rssi > best_rssi) best_rssi = scan_results[j].rssi;
+            }
+        }
+        if (visible) {
+            candidate_list[candidate_count]  = saved[i];
+            candidate_rssi[candidate_count]  = best_rssi;
+            candidate_count++;
+        }
+    }
+    taskEXIT_CRITICAL(&scan_mux);
+
+    /* Simple insertion sort by descending RSSI — candidate_count <= 6 */
+    for (int i = 1; i < candidate_count; i++) {
+        wifi_network_t key_net = candidate_list[i];
+        int key_rssi = candidate_rssi[i];
+        int j = i - 1;
+        while (j >= 0 && candidate_rssi[j] < key_rssi) {
+            candidate_list[j + 1] = candidate_list[j];
+            candidate_rssi[j + 1] = candidate_rssi[j];
+            j--;
+        }
+        candidate_list[j + 1] = key_net;
+        candidate_rssi[j + 1] = key_rssi;
+    }
+
+    candidate_index = 0;
+}
+
+static void wifi_scan_task(void *arg) {
+    (void)arg;
+    wifi_scan_config_t scan_cfg = {0};
+    esp_wifi_scan_start(&scan_cfg, true); /* blocking scan, runs in this task */
+    process_scan_results();
+    scan_in_progress = false;
+    vTaskDelete(NULL);
+}
+
+void wifi_manager_scan_start(void) {
+    if (scan_in_progress) return;
+    scan_in_progress = true;
+    safe_task_create(wifi_scan_task, "wifi_scan", 4096, NULL, 4, NULL);
 }
 
 void wifi_manager_schedule_recovery(void) {
