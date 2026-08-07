@@ -16,7 +16,7 @@ The easiest way to flash Satura Bridge is using the browser-based ESP Web Tools 
 
 5. Select:
    
-   "firmware/satura-bridge-v0.0.10.bin"
+   "firmware/satura-bridge-v0.0.11.bin"
 
 6. Set the flash address to:
    
@@ -38,7 +38,7 @@ pip install esptool
 
 Flash the firmware:
 
-esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.10.bin
+esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.11.bin
 
 Replace "COM3" with the serial port of your ESP32.
 
@@ -50,7 +50,7 @@ Examples:
 
 If your version of "esptool" uses the older command syntax, use:
 
-esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura-bridge-v0.0.10.bin
+esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura-bridge-v0.0.11.bin
 
 ---
 
@@ -113,7 +113,7 @@ Satura Bridge will connect to the configured Wi-Fi network and provide Internet 
 
 5. Выберите файл:
    
-   "firmware/satura-bridge-v0.0.10.bin"
+   "firmware/satura-bridge-v0.0.11.bin"
 
 6. Укажите адрес прошивки:
    
@@ -135,7 +135,7 @@ pip install esptool
 
 Прошейте устройство:
 
-esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.10.bin
+esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.11.bin
 
 Замените "COM3" на последовательный порт вашего ESP32.
 
@@ -147,7 +147,7 @@ esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.10
 
 Если используется старая версия "esptool", может потребоваться старый синтаксис:
 
-esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura-bridge-v0.0.10.bin
+esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura-bridge-v0.0.11.bin
 
 ---
 
