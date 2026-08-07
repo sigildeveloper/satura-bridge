@@ -71,8 +71,8 @@ Satura Bridge is currently focused on devices that support Bluetooth PAN / NAP. 
 | Component | Recommended | Minimum |
 |---|---|---|
 | Board | M5Stack Core2 | ESP32-WROOM-32 |
-| Power | USB-C power bank | Any USB 5V supply |
-| Case | Built into M5Stack Core2 | — |
+| Power | Built-in battery | Any USB 5V supply |
+| Case | Already in case | You could 3D print one or not |
 
 Satura Bridge requires an ESP32 variant with Bluetooth Classic support.
 
@@ -157,7 +157,8 @@ Satura Bridge is primarily intended for legacy mobile phones and other devices t
 | Sony Ericsson J108 | Tested |
 | Older Android devices | ✅ Working |
 | NetFront 3.4 | ✅ Working |
-| J2ME applications | ✅ Working |
+| J2ME applications (Opera Mini) | ✅ Working |
+| Built-in email client | ✅ Working |
 
 Compatibility with individual devices may vary depending on their Bluetooth PAN implementation and operating system.
 
@@ -339,8 +340,8 @@ Satura Bridge в первую очередь рассчитан на устро�
 | Компонент | Рекомендуемый вариант | Минимальный вариант |
 |---|---|---|
 | Плата | M5Stack Core2 | ESP32-WROOM-32 |
-| Питание | USB-C повербанк | Любой источник USB 5V |
-| Корпус | Встроенный корпус M5Stack Core2 | — |
+| Питание | Встроенный в девайс | Любой источник USB 5V |
+| Корпус | Уже в корпусе | Можно напечатать, а можно оставить как есть |
 
 Для работы Satura Bridge требуется ESP32 с поддержкой Bluetooth Classic.
 
