@@ -13,6 +13,7 @@
 #include "task_utils.h"
 #include "app_state.h"
 #include "wifi_manager.h"
+#include "proxy_gateway.h"
 
 static const char *TAG = "dns_server";
 
@@ -136,7 +137,7 @@ static int dns_make_captive_reply(const uint8_t *query, int qlen,
     reply[rlen++] = 0x00; reply[rlen++] = 0x01;
     reply[rlen++] = 0x00; reply[rlen++] = 0x01;
     reply[rlen++] = 0x00; reply[rlen++] = 0x00;
-    reply[rlen++] = 0x00; reply[rlen++] = 0x3C;
+    reply[rlen++] = 0x00; reply[rlen++] = 0x01;
     reply[rlen++] = 0x00; reply[rlen++] = 0x04;
     reply[rlen++] = GW_IP0; reply[rlen++] = GW_IP1;
     reply[rlen++] = GW_IP2; reply[rlen++] = GW_IP3;
@@ -241,18 +242,29 @@ static void dns_server_task(void *arg) {
         dns_get_upstream(&ext_dns);
 
         int rlen = 0;
-        bool have_reply = dns_cache_lookup(query_buf, qlen, reply_buf, &rlen);
-        if (!have_reply) {
-            if (get_wifi_connected() &&
-                dns_forward(dns_ext_sock, &ext_dns,
-                            query_buf, qlen, reply_buf, &rlen)) {
-                dns_cache_store(query_buf, qlen, reply_buf, rlen);
-                have_reply = true;
-            }
-        }
-        if (!have_reply) {
+        bool have_reply = false;
+
+        if (proxy_gateway_is_enabled() && app_state_get() == APP_BRIDGE) {
+            /* Proxy mode active: answer every A-record query with our own
+                * IP, so all HTTP traffic naturally lands on our web server,
+                * which will forward it to the configured upstream proxy. */
             rlen = dns_make_captive_reply(query_buf, qlen,
-                                          reply_buf, sizeof(reply_buf));
+                                            reply_buf, sizeof(reply_buf));
+            have_reply = (rlen > 0);
+        } else {
+            have_reply = dns_cache_lookup(query_buf, qlen, reply_buf, &rlen);
+            if (!have_reply) {
+                if (get_wifi_connected() &&
+                    dns_forward(dns_ext_sock, &ext_dns,
+                                query_buf, qlen, reply_buf, &rlen)) {
+                    dns_cache_store(query_buf, qlen, reply_buf, rlen);
+                    have_reply = true;
+                }
+            }
+            if (!have_reply) {
+                rlen = dns_make_captive_reply(query_buf, qlen,
+                                                reply_buf, sizeof(reply_buf));
+            }
         }
         if (rlen > 0) {
             sendto(dns_srv_sock, reply_buf, rlen, 0,

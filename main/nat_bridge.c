@@ -9,7 +9,6 @@
 #include "app_state.h"
 
 static const char *TAG = "nat_bridge";
-
 static struct netif *bt_netif = NULL;
 
 static void find_bt_netif(void) {

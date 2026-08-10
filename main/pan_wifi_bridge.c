@@ -125,7 +125,7 @@ static void watchdog_task(void *arg) {
 
         // /* Принудительная очистка устаревших NAPT записей при низком heap */
         // if (free_heap < 32768) {
-        //     ip_napt_gc();           
+        //     ip_napt_gc();
         // }
 
         /* WiFi stuck watchdog */
@@ -194,7 +194,8 @@ int btstack_main(int argc, const char *argv[]) {
 
     wifi_manager_load_saved_credentials();
     if (wifi_manager_has_credentials()) {
-        ESP_LOGI(TAG, "[APP] credentials loaded, waiting for BT before WiFi");
+        ESP_LOGI(TAG, "[APP] credentials loaded, connecting to WiFi immediately");
+        wifi_manager_start_connect();
     } else {
         app_state_set(APP_NO_WIFI);
     }

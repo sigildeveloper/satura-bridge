@@ -181,11 +181,16 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
             set_bt_connected(true);
 
             bool has_ssid = wifi_manager_has_credentials();
+            app_state_t cur_st = app_state_get();
+
+            /* If WiFi is already connecting (started proactively at boot)
+                * or already active, don't trigger a second, concurrent
+                * connect attempt — just let the in-flight one finish. */
+            bool already_connecting = (cur_st == APP_WIFI_CONNECTING);
 
             taskENTER_CRITICAL(&bt_pan_mux);
             bt_handle    = h;
-            bool can_start = !wifi_start_running;
-            if (can_start && !has_ssid) wifi_start_running = true;
+            bool can_start = !wifi_start_running && !already_connecting;
             taskEXIT_CRITICAL(&bt_pan_mux);
 
             bool wc = get_wifi_connected();

@@ -11,6 +11,7 @@ idf_component_register(
         "uptime.c"
         "http_server.c"
         "nat_bridge.c"
+        "proxy_gateway.c"
 
     INCLUDE_DIRS "."
 

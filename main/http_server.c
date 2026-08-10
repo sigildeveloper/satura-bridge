@@ -5,6 +5,7 @@
 #include "esp_http_server.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "lwip/sockets.h"
 
 #include "http_server.h"
 #include "config.h"
@@ -15,6 +16,7 @@
 #include "task_utils.h"
 #include "uptime.h"
 #include "nvs_storage.h"
+#include "proxy_gateway.h"
 
 #define PROJECT_VERSION "v0.0.11"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
@@ -25,28 +27,58 @@
     " | " PROJECT_VERSION \
     "</p>"
 
+static esp_err_t handler_proxy_relay(httpd_req_t *req);
+
 static httpd_handle_t http_server = NULL;
+static const char *TAG = "http_server";
+
+static bool host_matches_bridge(const char *host_no_port) {
+    if (strcmp(host_no_port, GW_IP_STR) == 0) return true;
+    char sta_ip[16] = {0};
+    wifi_manager_get_ip(sta_ip, sizeof(sta_ip));
+    if (sta_ip[0] != '\0' && strcmp(sta_ip, "--") != 0 &&
+        strcmp(host_no_port, sta_ip) == 0) return true;
+    return false;
+}
 
 static bool captive_check(httpd_req_t *req) {
     app_state_t st = app_state_get();
     if (st == APP_BRIDGE) return true;
     char host[64] = {0};
-    if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK
-        && strstr(host, GW_IP_STR) == NULL) {
+    if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK) {
         char host_no_port[64];
         strncpy(host_no_port, host, sizeof(host_no_port) - 1);
         host_no_port[sizeof(host_no_port)-1] = '\0';
         char *colon = strchr(host_no_port, ':');
         if (colon) *colon = '\0';
-        struct in_addr tmp;
-        if (inet_pton(AF_INET, host_no_port, &tmp) == 0) {
-            httpd_resp_set_status(req, "302 Found");
-            httpd_resp_set_hdr(req, "Location", "http://" GW_IP_STR "/");
-            httpd_resp_send(req, NULL, 0);
-            return false;
+
+        if (!host_matches_bridge(host_no_port)) {
+            struct in_addr tmp;
+            if (inet_pton(AF_INET, host_no_port, &tmp) == 0) {
+                httpd_resp_set_status(req, "302 Found");
+                httpd_resp_set_hdr(req, "Location", "http://" GW_IP_STR "/");
+                httpd_resp_send(req, NULL, 0);
+                return false;
+            }
         }
     }
     return true;
+}
+
+/* True if this request's Host header refers to something other than
+ * the bridge itself — i.e. it's real internet traffic that arrived
+ * here because proxy-mode DNS pointed everything at us. */
+static bool is_foreign_host(httpd_req_t *req) {
+    char host[128] = {0};
+    if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK) {
+        return false;
+    }
+    char host_no_port[128];
+    strncpy(host_no_port, host, sizeof(host_no_port) - 1);
+    host_no_port[sizeof(host_no_port) - 1] = '\0';
+    char *colon = strchr(host_no_port, ':');
+    if (colon) *colon = '\0';
+    return !host_matches_bridge(host_no_port);
 }
 
 /* ---- Static page templates ---- */
@@ -88,11 +120,13 @@ static const char PAGE_STATUS_FMT[] =
     "<b>WiFi RSSI:</b> %d dBm<br>"
     "<b>BT RSSI:</b> %d dBm<br>"
     "<b>Uptime:</b> %" PRIu32 "d %02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 "<br>"
-    "<b>Free heap:</b> %d KB"
+    "<b>Free heap:</b> %d KB<br>"
+    "<b>Proxy:</b> %s"
     "</div><hr>"
     "<a href='/'>Reload</a><br>"
     "<a href='/reset'>Forget WiFi</a><br>"
     "<a href='/networks'>Manage Networks</a><br>"
+    "<a href='/proxy'>Proxy Gateway</a><br>"
     "<a href='/reboot' style='color:#e74c3c;'>Reboot</a>"
     "<br><br><small>" PAGE_FOOTER "</small>"
     "</body></html>";
@@ -140,6 +174,29 @@ static const char PAGE_NETWORKS_FOOTER[] =
     "<br><br><small>" PAGE_FOOTER "</small>"
     "</body></html>";
 
+static const char PAGE_PROXY_FMT[] =
+    "<html><head><title>Proxy Gateway</title>"
+    "<meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<meta name='format-detection' content='telephone=no'>"
+    "</head>"
+    "<body style='font-family:sans-serif;padding:20px;text-align:center;'>"
+    "<h2>HTTP Proxy Gateway</h2><hr>"
+    "<p style='text-align:left;'>Redirects outgoing HTTP (port 80) connections "
+    "to an external gateway (e.g. a WAP compression gateway like 15pmm01.com). "
+    "HTTPS traffic is not affected.</p>"
+    "<form action='/proxy' method='post'>"
+    "<p><label><input type='checkbox' name='en' value='1' %s> Enabled</label></p>"
+    "<p>Gateway host:<br>"
+    "<input type='text' name='host' size='24' maxlength='63' value='%s'></p>"
+    "<p>Gateway port:<br>"
+    "<input type='text' name='port' size='10' maxlength='5' value='%d'></p>"
+    "<p><input type='submit' value='Save' style='font-size:110%%;'></p>"
+    "</form><hr>"
+    "<a href='/'>Back</a>"
+    "<br><br><small>" PAGE_FOOTER "</small>"
+    "</body></html>";
+
 static const char PAGE_CONNECT_PROMPT_FMT[] =
     "<html><head><title>Connect</title>"
     "<meta charset='utf-8'>"
@@ -160,6 +217,9 @@ static const char PAGE_CONNECT_PROMPT_FMT[] =
     "</body></html>";
 
 static esp_err_t handler_root(httpd_req_t *req) {
+    if (proxy_gateway_is_enabled() && is_foreign_host(req)) {
+        return handler_proxy_relay(req);
+    }
     if (!captive_check(req)) return ESP_OK;
     set_no_cache(req, "text/html");
 
@@ -172,7 +232,8 @@ static esp_err_t handler_root(httpd_req_t *req) {
     int8_t rw         = get_wifi_rssi();
     int8_t rb         = get_bt_rssi();
 
-    int retries = wifi_manager_get_retries();
+    int retries, max_retries;
+    wifi_manager_get_progress(&retries, &max_retries);
 
     bool show_status = (st == APP_BRIDGE) ||
                        (st == APP_WAIT_BT && w_conn);
@@ -207,7 +268,7 @@ static esp_err_t handler_root(httpd_req_t *req) {
                     "<a href='/reset'>Forget WiFi</a>"
                     "<br><small>" PAGE_FOOTER "</small>"
                     "</body></html>",
-                    esc, retries + 1, wifi_manager_get_max_retries());
+                    esc, retries + 1, max_retries);
                 esp_err_t r = httpd_resp_sendstr(req, page);
                 free(page);
                 return r;
@@ -234,9 +295,10 @@ static esp_err_t handler_root(httpd_req_t *req) {
     char ip_buf[16];
     wifi_manager_get_ip(ip_buf, sizeof(ip_buf));
     snprintf(page, 3072, PAGE_STATUS_FMT,
-             esc, ip_buf, (int)rw, (int)rb,
-             up / 86400, (up % 86400) / 3600, (up % 3600) / 60, up % 60,
-             (int)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024));
+                 esc, ip_buf, (int)rw, (int)rb,
+                 up / 86400, (up % 86400) / 3600, (up % 3600) / 60, up % 60,
+                 (int)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024),
+                 proxy_gateway_is_enabled() ? "Enabled" : "Disabled");
     esp_err_t r = httpd_resp_sendstr(req, page);
     free(page);
     return r;
@@ -273,6 +335,180 @@ static esp_err_t handler_reset(httpd_req_t *req) {
     app_state_set(APP_NO_WIFI);
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/");
+    return httpd_resp_send(req, NULL, 0);
+}
+
+static esp_err_t handler_proxy_get(httpd_req_t *req) {
+    set_no_cache(req, "text/html");
+
+    proxy_gateway_config_t cfg;
+    proxy_gateway_load(&cfg);
+
+    char *page = malloc(1536);
+    if (!page) return ESP_ERR_NO_MEM;
+    snprintf(page, 1536, PAGE_PROXY_FMT,
+             cfg.enabled ? "checked" : "",
+             cfg.host, (int)cfg.port);
+    esp_err_t r = httpd_resp_sendstr(req, page);
+    free(page);
+    return r;
+}
+
+static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    setsockopt(upstream_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    /* Read the upstream's status line + headers byte-by-byte until the
+     * blank line that ends them, so we can apply the real status code
+     * and Content-Type to our own response instead of leaking Squid's
+     * raw header block into the rendered page as text. */
+    char head[1024] = {0};
+    int head_len = 0;
+    while (head_len < (int)sizeof(head) - 1) {
+        char c;
+        int n = recv(upstream_sock, &c, 1, 0);
+        if (n <= 0) break;
+        head[head_len++] = c;
+        head[head_len] = '\0';
+        if (head_len >= 4 && strcmp(head + head_len - 4, "\r\n\r\n") == 0) break;
+    }
+
+    /* Parse "HTTP/1.1 200 OK" -> "200 OK" for httpd_resp_set_status */
+    char status[32] = "200 OK";
+    char *sp1 = strchr(head, ' ');
+    if (sp1) {
+        char *line_end = strstr(sp1, "\r\n");
+        if (line_end) {
+            size_t len = line_end - (sp1 + 1);
+            if (len < sizeof(status)) {
+                memcpy(status, sp1 + 1, len);
+                status[len] = '\0';
+            }
+        }
+    }
+    httpd_resp_set_status(req, status);
+
+    /* Pull Content-Type out of the header block, case-insensitively. */
+    char *ct_line = strcasestr(head, "Content-Type:");
+    if (ct_line) {
+        char *val = ct_line + 13;
+        while (*val == ' ') val++;
+        char *val_end = strstr(val, "\r\n");
+        char ctype[96] = {0};
+        if (val_end && (size_t)(val_end - val) < sizeof(ctype)) {
+            memcpy(ctype, val, val_end - val);
+            httpd_resp_set_type(req, ctype);
+        }
+    }
+
+    /* Now relay only the body that follows the header block. */
+    char buf[512];
+    while (1) {
+        int n = recv(upstream_sock, buf, sizeof(buf), 0);
+        if (n <= 0) break;
+        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) break;
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+}
+
+static esp_err_t handler_proxy_relay(httpd_req_t *req) {
+    char host[128] = {0};
+    if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    char *colon = strchr(host, ':');
+    if (colon) *colon = '\0';
+
+    char upstream_host[64] = {0};
+    uint16_t upstream_port = 0;
+    proxy_gateway_get_upstream(upstream_host, sizeof(upstream_host), &upstream_port);
+    if (upstream_host[0] == '\0' || upstream_port == 0) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    int upstream_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (upstream_sock < 0) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    struct sockaddr_in upstream_addr = {
+        .sin_family = AF_INET,
+        .sin_port   = htons(upstream_port),
+    };
+    if (inet_pton(AF_INET, upstream_host, &upstream_addr.sin_addr) != 1 ||
+        connect(upstream_sock, (struct sockaddr *)&upstream_addr, sizeof(upstream_addr)) != 0) {
+        ESP_LOGW(TAG, "failed to connect to upstream %s:%d", upstream_host, upstream_port);
+        close(upstream_sock);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    /* Rebuild the request line in absolute-URI form: GET http://host/uri HTTP/1.1 */
+    const char *method = (req->method == HTTP_POST) ? "POST" : "GET";
+    char req_line[1200];
+    snprintf(req_line, sizeof(req_line), "%s http://%s%s HTTP/1.1\r\n",
+                method, host, req->uri);
+    send(upstream_sock, req_line, strlen(req_line), 0);
+
+    char host_hdr[160];
+    snprintf(host_hdr, sizeof(host_hdr), "Host: %s\r\n", host);
+    send(upstream_sock, host_hdr, strlen(host_hdr), 0);
+
+    /* Forward the phone's real headers (User-Agent, Accept, etc.) — many
+        * WAP gateways use these to distinguish legitimate mobile browsers
+        * from generic/abusive traffic and will 403 requests without them. */
+    static const char *forward_headers[] = {
+        "User-Agent", "Accept", "Accept-Language", "Accept-Charset", NULL
+    };
+    for (int i = 0; forward_headers[i]; i++) {
+        char val[256] = {0};
+        if (httpd_req_get_hdr_value_str(req, forward_headers[i], val, sizeof(val)) == ESP_OK) {
+            char hdr_line[300];
+            snprintf(hdr_line, sizeof(hdr_line), "%s: %s\r\n", forward_headers[i], val);
+            send(upstream_sock, hdr_line, strlen(hdr_line), 0);
+        }
+    }
+
+    send(upstream_sock, "Connection: close\r\n\r\n", 22, 0);
+
+    /* For POST bodies we'd need to relay the request body too — not
+     * needed for basic retro-browser page loads, so this v1 only
+     * forwards GET requests with no body. */
+
+    ESP_LOGI(TAG, "relaying: %s", req_line);
+
+    relay_bytes_httpd(req, upstream_sock);
+
+    shutdown(upstream_sock, SHUT_RDWR);
+    close(upstream_sock);
+    return ESP_OK;
+}
+
+static esp_err_t handler_proxy_post(httpd_req_t *req) {
+    char buf[256] = {0};
+    int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (rec <= 0) return ESP_FAIL;
+    buf[rec] = '\0';
+
+    char host_s[64] = {0}, port_s[16] = {0}, en_s[8] = {0};
+    bool has_en = (httpd_query_key_value(buf, "en", en_s, sizeof(en_s)) == ESP_OK);
+    httpd_query_key_value(buf, "host", host_s, sizeof(host_s));
+    httpd_query_key_value(buf, "port", port_s, sizeof(port_s));
+
+    proxy_gateway_config_t cfg = {0};
+    cfg.enabled = has_en;
+    strncpy(cfg.host, host_s, sizeof(cfg.host) - 1);
+    int port = atoi(port_s);
+    cfg.port = (port > 0 && port < 65536) ? (uint16_t)port : 0;
+
+    proxy_gateway_save(&cfg);
+    proxy_gateway_invalidate_cache();
+
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "/proxy");
     return httpd_resp_send(req, NULL, 0);
 }
 
@@ -447,7 +683,8 @@ void http_server_start(void) {
     httpd_config_t cfg    = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size        = 8192;
     cfg.max_open_sockets  = 2;
-    cfg.max_uri_handlers  = 12;
+    cfg.max_uri_handlers  = 15;
+    cfg.uri_match_fn      = httpd_uri_match_wildcard;
     if (httpd_start(&http_server, &cfg) == ESP_OK) {
         static const httpd_uri_t uris[] = {
             { "/",                 HTTP_GET,  handler_root,               NULL },
@@ -461,8 +698,11 @@ void http_server_start(void) {
             { "/networks/delete",  HTTP_GET,  handler_networks_delete,    NULL },
             { "/networks/scan",    HTTP_GET,  handler_networks_scan,      NULL },
             { "/networks/connect", HTTP_GET,  handler_networks_connect_get, NULL },
+            { "/proxy",            HTTP_GET,  handler_proxy_get,          NULL },
+            { "/proxy",            HTTP_POST, handler_proxy_post,         NULL },
+            { "/*",                HTTP_GET,  handler_proxy_relay,        NULL },
         };
-        for (int i = 0; i < 11; i++)
+        for (int i = 0; i < 13; i++)
             httpd_register_uri_handler(http_server, &uris[i]);
         httpd_register_err_handler(http_server,
                                    HTTPD_404_NOT_FOUND, handler_404);

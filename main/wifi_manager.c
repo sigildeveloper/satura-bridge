@@ -100,20 +100,18 @@ void wifi_manager_get_ip(char *out, size_t len) {
     taskEXIT_CRITICAL(&wifi_mux);
 }
 
-int wifi_manager_get_retries(void) {
-    int r;
-    taskENTER_CRITICAL(&wifi_mux);
-    r = candidate_index;
-    taskEXIT_CRITICAL(&wifi_mux);
-    return r;
-}
+void wifi_manager_get_progress(int *current, int *total) {
+    taskENTER_CRITICAL(&scan_mux);
+    int idx = candidate_index;
+    int cnt = candidate_count;
+    taskEXIT_CRITICAL(&scan_mux);
 
-int wifi_manager_get_max_retries(void) {
-    int c;
-    taskENTER_CRITICAL(&wifi_mux);
-    c = candidate_count > 0 ? candidate_count : 1;
-    taskEXIT_CRITICAL(&wifi_mux);
-    return c;
+    if (cnt <= 0) cnt = 1;
+    if (idx >= cnt) idx = cnt - 1;   /* clamp — never show e.g. "2 of 1" */
+    if (idx < 0) idx = 0;
+
+    *current = idx;
+    *total   = cnt;
 }
 
 esp_netif_t *wifi_manager_get_sta_netif(void) {
@@ -128,10 +126,24 @@ void wifi_manager_set_state_change_cb(wifi_manager_state_cb_t cb) {
  * Connect / retry
  * ============================================================ */
 
+#define WIFI_FULL_RETRY_DELAY_MS 15000
+
+static void full_retry_task(void *arg) {
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(WIFI_FULL_RETRY_DELAY_MS));
+    if (wifi_manager_has_credentials()) {
+        ESP_LOGI(TAG, "[WIFI] retrying full scan+connect after failure");
+        wifi_manager_start_connect();
+    }
+    vTaskDelete(NULL);
+}
+
 static void try_connect_candidate(int idx) {
     if (idx < 0 || idx >= candidate_count) {
-        ESP_LOGW(TAG, "[WIFI] no more candidates, giving up");
+        ESP_LOGW(TAG, "[WIFI] no more candidates, will retry in %d s",
+                 WIFI_FULL_RETRY_DELAY_MS / 1000);
         app_state_set(APP_WIFI_FAILED);
+        safe_task_create(full_retry_task, "wifi_full_retry", 3072, NULL, 4, NULL);
         return;
     }
 
@@ -487,6 +499,14 @@ static void process_scan_results(void) {
 static void build_candidate_list(void) {
     wifi_network_t saved[WIFI_MAX_SAVED_NETWORKS];
     int saved_count = nvs_storage_load_networks(saved, WIFI_MAX_SAVED_NETWORKS);
+
+    ESP_LOGI(TAG, "[DEBUG] saved_count=%d, scan_result_count=%d", saved_count, scan_result_count);
+    for (int i = 0; i < saved_count; i++) {
+        ESP_LOGI(TAG, "[DEBUG] saved[%d] = '%s'", i, saved[i].ssid);
+    }
+    for (int i = 0; i < scan_result_count; i++) {
+        ESP_LOGI(TAG, "[DEBUG] scan_results[%d] = '%s' rssi=%d", i, scan_results[i].ssid, scan_results[i].rssi);
+    }
 
     candidate_count = 0;
 
