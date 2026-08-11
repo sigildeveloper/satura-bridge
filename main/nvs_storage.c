@@ -8,6 +8,9 @@
 #define NVS_KEY_NET_COUNT   "net_count"
 #define NVS_KEY_NET_BLOB    "net_blob"
 
+#include "esp_log.h"
+static const char *TAG = "nvs_storage";
+
 /* ---- Legacy single-network API (unused after migration, kept for safety) ---- */
 
 bool nvs_storage_save(const char *ssid, const char *pass) {
@@ -15,9 +18,12 @@ bool nvs_storage_save(const char *ssid, const char *pass) {
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
     nvs_set_str(h, NVS_KEY_SSID, ssid);
     nvs_set_str(h, NVS_KEY_PASS, pass);
-    nvs_commit(h);
+    esp_err_t err = nvs_commit(h);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_commit failed: %s", esp_err_to_name(err));
+    }
     nvs_close(h);
-    return true;
+    return err == ESP_OK;
 }
 
 bool nvs_storage_load(char *ssid_out, size_t ssid_len,
@@ -37,7 +43,10 @@ void nvs_storage_clear(void) {
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
         nvs_erase_key(h, NVS_KEY_SSID);
         nvs_erase_key(h, NVS_KEY_PASS);
-        nvs_commit(h);
+        esp_err_t err = nvs_commit(h);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "nvs_commit failed: %s", esp_err_to_name(err));
+        }
         nvs_close(h);
     }
 }
@@ -91,9 +100,12 @@ bool nvs_storage_save_networks(const wifi_network_t *networks, int count) {
     } else {
         nvs_erase_key(h, NVS_KEY_NET_BLOB);
     }
-    nvs_commit(h);
+    esp_err_t err = nvs_commit(h);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_commit failed: %s", esp_err_to_name(err));
+    }
     nvs_close(h);
-    return true;
+    return err == ESP_OK;
 }
 
 bool nvs_storage_add_network(const char *ssid, const char *pass) {
@@ -139,7 +151,10 @@ void nvs_storage_clear_networks(void) {
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
         nvs_erase_key(h, NVS_KEY_NET_COUNT);
         nvs_erase_key(h, NVS_KEY_NET_BLOB);
-        nvs_commit(h);
+        esp_err_t err = nvs_commit(h);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "nvs_commit failed: %s", esp_err_to_name(err));
+        }
         nvs_close(h);
     }
 }

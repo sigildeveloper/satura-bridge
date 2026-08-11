@@ -186,7 +186,10 @@ Useful information to include:
 - [x] Watchdog and recovery mechanisms
 - [x] Modular codebase refactor
 - [x] Multiple saved Wi-Fi networks with scan-and-connect UI
+- [ ] Unified Wi-Fi connection state machine (queue-based, single owner)
 - [ ] Configurable proxy support
+- [ ] Proxy: resolve gateway hostnames, not just IP addresses
+- [ ] Proxy: forward POST request bodies
 - [ ] Test more Nokia Symbian devices
 - [ ] Test more Sony Ericsson devices
 - [ ] Improve compatibility with older phones
@@ -454,7 +457,10 @@ Satura Bridge в первую очередь рассчитан на стары�
 - [x] Watchdog и механизмы восстановления
 - [x] Модульный рефакторинг кодовой базы
 - [x] Несколько сохранённых Wi-Fi сетей с UI сканирования и подключения
+- [ ] Единый конечный автомат для WiFi-подключений (с очередью команд)
 - [ ] Настраиваемая поддержка прокси
+- [ ] Прокси: резолвинг доменных имён гейтвея, не только IP
+- [ ] Прокси: пересылка тела POST-запросов
 - [ ] Протестировать больше устройств Nokia на Symbian
 - [ ] Протестировать больше устройств Sony Ericsson
 - [ ] Улучшить совместимость со старыми телефонами

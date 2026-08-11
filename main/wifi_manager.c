@@ -26,6 +26,7 @@ static volatile bool scan_in_progress = false;
 static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
 static int scan_result_count = 0;
 static portMUX_TYPE scan_mux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool connect_flow_running = false;
 
 /* Index into the saved-network list currently being attempted, and the
  * ranked candidate list built from scan + saved networks */
@@ -186,15 +187,27 @@ static void wifi_connect_flow_task(void *arg) {
     if (candidate_count == 0) {
         ESP_LOGW(TAG, "[WIFI] no saved networks visible");
         app_state_set(APP_WIFI_FAILED);
+        connect_flow_running = false;
         vTaskDelete(NULL);
         return;
     }
 
     try_connect_candidate(candidate_index);
+    connect_flow_running = false;
     vTaskDelete(NULL);
 }
 
 void wifi_manager_start_connect(void) {
+    taskENTER_CRITICAL(&wifi_mux);
+    bool already = connect_flow_running;
+    if (!already) connect_flow_running = true;
+    taskEXIT_CRITICAL(&wifi_mux);
+
+    if (already) {
+        ESP_LOGW(TAG, "[WIFI] connect already in progress, ignoring duplicate request");
+        return;
+    }
+
     app_state_set(APP_WIFI_CONNECTING);
     safe_task_create(wifi_connect_flow_task, "wifi_conn", 4096, NULL, 5, NULL);
 }
