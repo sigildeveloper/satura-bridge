@@ -22,11 +22,14 @@ static const char *TAG = "wifi_mgr";
 
 #define WIFI_SCAN_TIMEOUT_MS 5000
 
+#define CAND_MAX_ATTEMPTS 2
+
+static int candidate_attempt = 0;
+
 static volatile bool scan_in_progress = false;
 static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
 static int scan_result_count = 0;
 static portMUX_TYPE scan_mux = portMUX_INITIALIZER_UNLOCKED;
-static volatile bool connect_flow_running = false;
 
 /* Index into the saved-network list currently being attempted, and the
  * ranked candidate list built from scan + saved networks */
@@ -144,11 +147,22 @@ static void try_connect_candidate(int idx) {
         ESP_LOGW(TAG, "[WIFI] no more candidates, will retry in %d s",
                  WIFI_FULL_RETRY_DELAY_MS / 1000);
         app_state_set(APP_WIFI_FAILED);
+        candidate_count = 0;   /* clear the guard so a new cycle can start */
         safe_task_create(full_retry_task, "wifi_full_retry", 3072, NULL, 4, NULL);
         return;
     }
 
+    if (candidate_attempt == 0) {
+        ESP_LOGI(TAG, "[WIFI] trying candidate %d/%d: %s (rssi %d)",
+                 idx + 1, candidate_count, candidate_list[idx].ssid, candidate_rssi[idx]);
+    } else {
+        ESP_LOGI(TAG, "[WIFI] retrying candidate %d/%d: %s (attempt %d/%d)",
+                 idx + 1, candidate_count, candidate_list[idx].ssid,
+                 candidate_attempt + 1, CAND_MAX_ATTEMPTS);
+    }
+
     wifi_config_t cfg = {0};
+
     strncpy((char *)cfg.sta.ssid, candidate_list[idx].ssid, sizeof(cfg.sta.ssid) - 1);
     strncpy((char *)cfg.sta.password, candidate_list[idx].pass, sizeof(cfg.sta.password) - 1);
     bool has_pass = (strlen(candidate_list[idx].pass) != 0);
@@ -163,9 +177,6 @@ static void try_connect_candidate(int idx) {
     strncpy(wifi_pass, candidate_list[idx].pass, sizeof(wifi_pass) - 1);
     taskEXIT_CRITICAL(&wifi_mux);
 
-    ESP_LOGI(TAG, "[WIFI] trying candidate %d/%d: %s (rssi %d)",
-             idx + 1, candidate_count, candidate_list[idx].ssid, candidate_rssi[idx]);
-
     esp_wifi_connect();
 }
 
@@ -178,6 +189,7 @@ static void wifi_connect_flow_task(void *arg) {
     scan_in_progress = false;
 
     build_candidate_list();
+   candidate_attempt = 0;
 
     taskENTER_CRITICAL(&wifi_mux);
     wifi_retries        = 0;
@@ -187,24 +199,22 @@ static void wifi_connect_flow_task(void *arg) {
     if (candidate_count == 0) {
         ESP_LOGW(TAG, "[WIFI] no saved networks visible");
         app_state_set(APP_WIFI_FAILED);
-        connect_flow_running = false;
         vTaskDelete(NULL);
         return;
     }
 
     try_connect_candidate(candidate_index);
-    connect_flow_running = false;
     vTaskDelete(NULL);
 }
 
 void wifi_manager_start_connect(void) {
-    taskENTER_CRITICAL(&wifi_mux);
-    bool already = connect_flow_running;
-    if (!already) connect_flow_running = true;
-    taskEXIT_CRITICAL(&wifi_mux);
-
-    if (already) {
-        ESP_LOGW(TAG, "[WIFI] connect already in progress, ignoring duplicate request");
+    /* Guard against concurrent connect cycles by checking real state
+     * instead of a separate flag that could get stuck if a task ever
+     * crashed before clearing it: already connected, already scanning,
+     * or already mid-connect (candidates queued) — any of these means
+     * a cycle is already running, so ignore this request. */
+    if (get_wifi_connected() || scan_in_progress || candidate_count > 0) {
+        ESP_LOGW(TAG, "[WIFI] connect cycle already active, ignoring duplicate request");
         return;
     }
 
@@ -273,16 +283,22 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         taskEXIT_CRITICAL(&wifi_mux);
 
         if (st == APP_WIFI_CONNECTING) {
-            candidate_index++;
-            if (candidate_index < candidate_count) {
-                /* Try next candidate immediately, no delay needed —
-                    * we're just moving to a different already-scanned network */
+            candidate_attempt++;
+            if (candidate_attempt < CAND_MAX_ATTEMPTS) {
+                /* Retry the same candidate — the failure may have been a
+                    * transient BT/WiFi radio coexistence hiccup rather than
+                    * a real connectivity problem with this network. */
                 try_connect_candidate(candidate_index);
             } else {
-                ESP_LOGW(TAG, "[WIFI] exhausted all %d candidate(s)", candidate_count);
-                app_state_set(APP_WIFI_FAILED);
+                candidate_attempt = 0;
+                candidate_index++;
+                if (candidate_index < candidate_count) {
+                    try_connect_candidate(candidate_index);
+                } else {
+                    ESP_LOGW(TAG, "[WIFI] exhausted all %d candidate(s)", candidate_count);
+                    try_connect_candidate(candidate_index); /* triggers the "no more candidates" branch */
+                }
             }
-
         } else if (st == APP_BRIDGE || st == APP_BRIDGE_NO_WIFI) {
             bool has_ssid = wifi_manager_has_credentials();
 

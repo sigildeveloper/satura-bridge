@@ -103,9 +103,19 @@ static void bt_reopen_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+#define WIFI_KICK_DELAY_MS 3000
+
 static void wifi_start_task(void *arg) {
     (void)arg;
-    wifi_manager_start_connect();
+    /* The scan monopolizes the shared BT/WiFi radio for a couple of
+     * seconds — give the fresh BNEP handshake time to settle first,
+     * so scanning doesn't destabilize a connection that's still coming up. */
+    vTaskDelay(pdMS_TO_TICKS(WIFI_KICK_DELAY_MS));
+
+    if (get_bt_connected() && !get_wifi_connected()) {
+        wifi_manager_start_connect();
+    }
+
     taskENTER_CRITICAL(&bt_pan_mux);
     wifi_start_running = false;
     taskEXIT_CRITICAL(&bt_pan_mux);
@@ -143,7 +153,13 @@ static void hci_packet_handler(uint8_t type, uint16_t ch,
             break;
         case GAP_EVENT_RSSI_MEASUREMENT:
             if (gap_event_rssi_measurement_get_con_handle(pkt) == get_bt_handle()) {
-                set_bt_rssi(gap_event_rssi_measurement_get_rssi(pkt));
+                int8_t rssi = gap_event_rssi_measurement_get_rssi(pkt);
+                /* 0 dBm from a fresh/not-yet-ready connection reads as an
+                    * implausibly perfect signal — treat it as "no data yet"
+                    * rather than overwriting a real prior reading with it. */
+                if (rssi != 0) {
+                    set_bt_rssi(rssi);
+                }
             }
             break;
         case HCI_EVENT_PIN_CODE_REQUEST:
@@ -202,8 +218,6 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
 
             ESP_LOGI(TAG, "[BT] BNEP channel opened");
             bt_set_visible(false);
-
-            bt_pan_request_rssi_poll();
 
             if (wc) {
                 app_state_set(APP_BRIDGE);

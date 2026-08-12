@@ -223,10 +223,6 @@ static esp_err_t handler_root(httpd_req_t *req) {
     if (!captive_check(req)) return ESP_OK;
     set_no_cache(req, "text/html");
 
-    if (get_bt_connected()) {
-        bt_pan_request_rssi_poll();
-    }
-
     app_state_t st    = app_state_get();
     bool w_conn       = get_wifi_connected();
     int8_t rw         = get_wifi_rssi();
