@@ -5,7 +5,7 @@
 Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.12-green.svg)](firmware/)
+[![Version](https://img.shields.io/badge/version-v0.0.13-green.svg)](firmware/)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
@@ -189,9 +189,9 @@ Useful information to include:
 * [x] Modular codebase refactor
 * [x] Multiple saved Wi-Fi networks with scan-and-connect UI
 * [x] HTTP proxy gateway support
+* [x] Proxy: forward POST request bodies
 * [ ] Unified Wi-Fi connection state machine (queue-based, single owner)
 * [ ] Proxy: resolve gateway hostnames, not only IP addresses
-* [ ] Proxy: forward POST request bodies
 * [ ] Test more Nokia Symbian devices
 * [ ] Test more Sony Ericsson devices
 * [ ] Improve compatibility with older phones
@@ -237,7 +237,7 @@ satura-bridge/
 │   └── btstack_config.h         # BTstack configuration
 ├── components/                  # BTstack and dependencies
 ├── firmware/
-│   └── satura-bridge-v0.0.12.bin # Prebuilt firmware
+│   └── satura-bridge-v0.0.13.bin # Prebuilt firmware
 ├── sdkconfig.defaults           # Build configuration
 ├── FLASH.md                     # Flashing instructions
 └── README.md
@@ -463,9 +463,9 @@ Satura Bridge в первую очередь предназначен для с�
 * [x] Модульный рефакторинг кодовой базы
 * [x] Несколько сохранённых Wi-Fi сетей с UI сканирования и подключения
 * [x] Поддержка HTTP прокси
+* [x] Прокси: пересылка тела POST-запросов
 * [ ] Единый конечный автомат для Wi-Fi подключений (с очередью команд и одним владельцем)
 * [ ] Прокси: разрешение имён шлюза, а не только IP-адресов
-* [ ] Прокси: пересылка тела POST-запросов
 * [ ] Протестировать больше устройств Nokia на Symbian
 * [ ] Протестировать больше устройств Sony Ericsson
 * [ ] Улучшить совместимость со старыми телефонами
@@ -511,7 +511,7 @@ satura-bridge/
 │   └── btstack_config.h         # Конфигурация BTstack
 ├── components/                  # BTstack и зависимости
 ├── firmware/
-│   └── satura-bridge-v0.0.12.bin # Готовая прошивка
+│   └── satura-bridge-v0.0.13.bin # Готовая прошивка
 ├── sdkconfig.defaults           # Конфигурация сборки
 ├── FLASH.md                     # Инструкция по прошивке
 └── README.md

@@ -18,7 +18,7 @@
 #include "nvs_storage.h"
 #include "proxy_gateway.h"
 
-#define PROJECT_VERSION "v0.0.12"
+#define PROJECT_VERSION "v0.0.13"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
 #define PAGE_FOOTER \
     "<hr><p>" \
@@ -350,15 +350,19 @@ static esp_err_t handler_proxy_get(httpd_req_t *req) {
     return r;
 }
 
+static bool is_hop_by_hop_header(const char *name) {
+    return strcasecmp(name, "Content-Length") == 0 ||
+           strcasecmp(name, "Transfer-Encoding") == 0 ||
+           strcasecmp(name, "Connection") == 0;
+}
+
 static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
     struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
     setsockopt(upstream_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     /* Read the upstream's status line + headers byte-by-byte until the
-     * blank line that ends them, so we can apply the real status code
-     * and Content-Type to our own response instead of leaking Squid's
-     * raw header block into the rendered page as text. */
-    char head[1024] = {0};
+     * blank line that ends them. */
+    char head[2048] = {0};
     int head_len = 0;
     while (head_len < (int)sizeof(head) - 1) {
         char c;
@@ -384,17 +388,47 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
     }
     httpd_resp_set_status(req, status);
 
-    /* Pull Content-Type out of the header block, case-insensitively. */
-    char *ct_line = strcasestr(head, "Content-Type:");
-    if (ct_line) {
-        char *val = ct_line + 13;
-        while (*val == ' ') val++;
-        char *val_end = strstr(val, "\r\n");
-        char ctype[96] = {0};
-        if (val_end && (size_t)(val_end - val) < sizeof(ctype)) {
-            memcpy(ctype, val, val_end - val);
-            httpd_resp_set_type(req, ctype);
+    /* Forward every response header except hop-by-hop ones that
+     * esp_http_server manages itself (we're using chunked transfer,
+     * so Content-Length/Transfer-Encoding from upstream would conflict). */
+    char *line_start = strstr(head, "\r\n");
+    if (line_start) line_start += 2; /* skip past the status line */
+    while (line_start && *line_start && strncmp(line_start, "\r\n", 2) != 0) {
+        char *line_end = strstr(line_start, "\r\n");
+        if (!line_end) break;
+
+        char *colon = memchr(line_start, ':', line_end - line_start);
+        if (colon) {
+            char name[64] = {0};
+            size_t name_len = colon - line_start;
+            if (name_len < sizeof(name)) {
+                memcpy(name, line_start, name_len);
+                name[name_len] = '\0';
+
+                if (!is_hop_by_hop_header(name)) {
+                    char *val_start = colon + 1;
+                    while (*val_start == ' ') val_start++;
+                    size_t val_len = line_end - val_start;
+
+                    /* httpd_resp_set_hdr() only stores the pointer, not a
+                        * copy — the value must stay valid until the response
+                        * is sent, so allocate it instead of using a stack
+                        * buffer that goes out of scope. */
+                    char *value = malloc(val_len + 1);
+                    if (value) {
+                        memcpy(value, val_start, val_len);
+                        value[val_len] = '\0';
+                        httpd_resp_set_hdr(req, name, value);
+                        /* Intentionally not freed here — esp_http_server
+                            * needs it until the response finishes sending,
+                            * which happens right after this function returns.
+                            * The whole request's memory is reclaimed when the
+                            * connection's task exits. */
+                    }
+                }
+            }
         }
+        line_start = line_end + 2;
     }
 
     /* Now relay only the body that follows the header block. */
@@ -446,33 +480,47 @@ static esp_err_t handler_proxy_relay(httpd_req_t *req) {
     const char *method = (req->method == HTTP_POST) ? "POST" : "GET";
     char req_line[1200];
     snprintf(req_line, sizeof(req_line), "%s http://%s%s HTTP/1.1\r\n",
-                method, host, req->uri);
+             method, host, req->uri);
     send(upstream_sock, req_line, strlen(req_line), 0);
 
     char host_hdr[160];
     snprintf(host_hdr, sizeof(host_hdr), "Host: %s\r\n", host);
     send(upstream_sock, host_hdr, strlen(host_hdr), 0);
 
-    /* Forward the phone's real headers (User-Agent, Accept, etc.) — many
-        * WAP gateways use these to distinguish legitimate mobile browsers
-        * from generic/abusive traffic and will 403 requests without them. */
+    /* Forward the phone's real headers — many WAP gateways use these to
+     * distinguish legitimate mobile browsers, and Cookie/Content-Type
+     * are needed for logins and form submissions to work at all. */
     static const char *forward_headers[] = {
-        "User-Agent", "Accept", "Accept-Language", "Accept-Charset", NULL
+        "User-Agent", "Accept", "Accept-Language", "Accept-Charset",
+        "Cookie", "Content-Type", NULL
     };
     for (int i = 0; forward_headers[i]; i++) {
-        char val[256] = {0};
+        char val[512] = {0};
         if (httpd_req_get_hdr_value_str(req, forward_headers[i], val, sizeof(val)) == ESP_OK) {
-            char hdr_line[300];
+            char hdr_line[560];
             snprintf(hdr_line, sizeof(hdr_line), "%s: %s\r\n", forward_headers[i], val);
             send(upstream_sock, hdr_line, strlen(hdr_line), 0);
         }
     }
 
+    /* Forward the request body for POST (form submissions, logins). */
+    size_t remaining = req->content_len;
+    if (remaining > 0) {
+        char len_hdr[64];
+        snprintf(len_hdr, sizeof(len_hdr), "Content-Length: %d\r\n", (int)remaining);
+        send(upstream_sock, len_hdr, strlen(len_hdr), 0);
+    }
+
     send(upstream_sock, "Connection: close\r\n\r\n", 22, 0);
 
-    /* For POST bodies we'd need to relay the request body too — not
-     * needed for basic retro-browser page loads, so this v1 only
-     * forwards GET requests with no body. */
+    char body_buf[512];
+    while (remaining > 0) {
+        size_t chunk = remaining < sizeof(body_buf) ? remaining : sizeof(body_buf);
+        int n = httpd_req_recv(req, body_buf, chunk);
+        if (n <= 0) break;
+        send(upstream_sock, body_buf, n, 0);
+        remaining -= n;
+    }
 
     ESP_LOGI(TAG, "relaying: %s", req_line);
 
@@ -679,7 +727,7 @@ void http_server_start(void) {
     httpd_config_t cfg    = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size        = 8192;
     cfg.max_open_sockets  = 2;
-    cfg.max_uri_handlers  = 15;
+    cfg.max_uri_handlers  = 16;
     cfg.uri_match_fn      = httpd_uri_match_wildcard;
     if (httpd_start(&http_server, &cfg) == ESP_OK) {
         static const httpd_uri_t uris[] = {
@@ -697,8 +745,9 @@ void http_server_start(void) {
             { "/proxy",            HTTP_GET,  handler_proxy_get,          NULL },
             { "/proxy",            HTTP_POST, handler_proxy_post,         NULL },
             { "/*",                HTTP_GET,  handler_proxy_relay,        NULL },
+            { "/*",                HTTP_POST, handler_proxy_relay,        NULL },
         };
-        for (int i = 0; i < 13; i++)
+        for (int i = 0; i < 14; i++)
             httpd_register_uri_handler(http_server, &uris[i]);
         httpd_register_err_handler(http_server,
                                    HTTPD_404_NOT_FOUND, handler_404);

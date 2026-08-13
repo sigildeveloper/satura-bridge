@@ -108,3 +108,27 @@ Satura Bridge now supports an HTTP proxy gateway for legacy devices and WAP-styl
 * Updated firmware and documentation version references
 
 This release adds the first dedicated proxy function to Satura Bridge. It allows the bridge to use HTTP proxy gateways that are used by some legacy mobile Internet services and applications.
+
+## [0.0.13] - 2026-08-13
+
+### HTTP Proxy Improvements
+
+Satura Bridge now supports HTTP POST requests through the configured proxy and forwards selected response headers to the client.
+
+### What's new
+
+* HTTP POST request support through the proxy
+* POST body forwarding
+* Cookie forwarding
+* Response header forwarding
+* Improved compatibility with legacy browsers and applications that use HTTP proxy access
+
+### Compatibility & Testing
+
+* Tested HTTP connectivity with legacy mobile software
+* Existing Wi-Fi network management and HTTP proxy functionality are retained
+
+### Firmware
+
+* Added prebuilt `satura-bridge-v0.0.13.bin`
+* Updated firmware and documentation version references
