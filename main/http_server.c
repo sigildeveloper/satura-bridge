@@ -361,8 +361,11 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
     setsockopt(upstream_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     /* Read the upstream's status line + headers byte-by-byte until the
-     * blank line that ends them. */
-    char head[2048] = {0};
+     * blank line that ends them. Heap-allocated — 2KB is too much to
+     * safely add to an already-deep call stack inside the httpd task. */
+    char *head = malloc(2048);
+    if (!head) return;
+    head[0] = '\0';
     int head_len = 0;
     while (head_len < (int)sizeof(head) - 1) {
         char c;
@@ -370,7 +373,9 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
         if (n <= 0) break;
         head[head_len++] = c;
         head[head_len] = '\0';
-        if (head_len >= 4 && strcmp(head + head_len - 4, "\r\n\r\n") == 0) break;
+        if (head_len >= 4 &&
+            head[head_len - 4] == '\r' && head[head_len - 3] == '\n' &&
+            head[head_len - 2] == '\r' && head[head_len - 1] == '\n') break;
     }
 
     /* Parse "HTTP/1.1 200 OK" -> "200 OK" for httpd_resp_set_status */
@@ -430,6 +435,8 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
         }
         line_start = line_end + 2;
     }
+
+    free(head);
 
     /* Now relay only the body that follows the header block. */
     char buf[512];
@@ -725,7 +732,7 @@ static esp_err_t handler_404(httpd_req_t *req, httpd_err_code_t err) {
 
 void http_server_start(void) {
     httpd_config_t cfg    = HTTPD_DEFAULT_CONFIG();
-    cfg.stack_size        = 8192;
+    cfg.stack_size        = 12288;
     cfg.max_open_sockets  = 2;
     cfg.max_uri_handlers  = 16;
     cfg.uri_match_fn      = httpd_uri_match_wildcard;
