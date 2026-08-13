@@ -325,11 +325,20 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         }
 
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
+            ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
 
-        taskENTER_CRITICAL(&wifi_mux);
-        snprintf(wifi_ip, sizeof(wifi_ip), IPSTR, IP2STR(&e->ip_info.ip));
-        taskEXIT_CRITICAL(&wifi_mux);
+            taskENTER_CRITICAL(&wifi_mux);
+            snprintf(wifi_ip, sizeof(wifi_ip), IPSTR, IP2STR(&e->ip_info.ip));
+            taskEXIT_CRITICAL(&wifi_mux);
+
+            /* Connection succeeded — clear the candidate list so the next
+             * wifi_manager_start_connect() call (e.g. after later losing this
+             * connection) isn't blocked by the guard thinking a cycle is
+             * still in progress. */
+            taskENTER_CRITICAL(&scan_mux);
+            candidate_count = 0;
+            candidate_index = 0;
+            taskEXIT_CRITICAL(&scan_mux);
 
         esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 

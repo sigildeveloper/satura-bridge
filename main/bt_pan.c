@@ -145,12 +145,32 @@ static void hci_packet_handler(uint8_t type, uint16_t ch,
                 hci_event_connection_complete_get_status(pkt),
                 addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
             break;
-        case HCI_EVENT_DISCONNECTION_COMPLETE:
+        case HCI_EVENT_DISCONNECTION_COMPLETE: {
+            hci_con_handle_t disc_handle =
+                hci_event_disconnection_complete_get_connection_handle(pkt);
             ESP_LOGI(TAG,
                 "[HCI] Disconnected handle=0x%04x reason=0x%02x",
-                hci_event_disconnection_complete_get_connection_handle(pkt),
+                disc_handle,
                 hci_event_disconnection_complete_get_reason(pkt));
+
+            /* If the phone tore down the HCI link before BNEP ever opened
+                * (e.g. it gave up mid-handshake), BNEP_EVENT_CHANNEL_CLOSED
+                * never fires and we'd stay hidden forever. Make sure we
+                * become visible again if we're not actually bridging. */
+            if (!get_bt_connected() && disc_handle == get_bt_handle()) {
+                taskENTER_CRITICAL(&bt_pan_mux);
+                bt_handle = HCI_CON_HANDLE_INVALID;
+                bool already = bt_reopen_running;
+                if (!already) bt_reopen_running = true;
+                taskEXIT_CRITICAL(&bt_pan_mux);
+
+                if (!already) {
+                    ESP_LOGW(TAG, "[BTR] HCI disconnect without BNEP open, recovering visibility");
+                    safe_task_create(bt_reopen_task, "btr", 4096, NULL, 4, NULL);
+                }
+            }
             break;
+        }
         case GAP_EVENT_RSSI_MEASUREMENT:
             if (gap_event_rssi_measurement_get_con_handle(pkt) == get_bt_handle()) {
                 int8_t rssi = gap_event_rssi_measurement_get_rssi(pkt);
