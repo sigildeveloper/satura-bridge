@@ -5,7 +5,7 @@
 Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.11-green.svg)](firmware/)
+[![Version](https://img.shields.io/badge/version-v0.0.12-green.svg)](firmware/)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
@@ -59,6 +59,7 @@ Satura Bridge is currently focused on devices that support Bluetooth PAN / NAP. 
 - Captive portal-style setup
 - Automatic connection to saved Wi-Fi on boot
 - Support for up to 6 saved Wi-Fi networks, connecting to the strongest visible one
+- HTTP proxy gateway support (e.g. WAP compression gateways)
 - Automatic connection recovery
 - Watchdog that can restart hung components without rebooting the entire device
 - Single-file firmware flashing
@@ -121,6 +122,7 @@ It can be accessed while a phone is connected to Satura Bridge over Bluetooth.
 | `/` | Status, RSSI, uptime, heap information |
 | `/setup` | Configure Wi-Fi manually |
 | `/networks` | Scan, add, and remove saved Wi-Fi networks |
+| `/proxy` | HTTP proxy settings |
 | `/reset` | Forget all saved Wi-Fi networks |
 | `/reboot` | Reboot the device |
 
@@ -186,8 +188,8 @@ Useful information to include:
 - [x] Watchdog and recovery mechanisms
 - [x] Modular codebase refactor
 - [x] Multiple saved Wi-Fi networks with scan-and-connect UI
+- [x] HTTP proxy gateway support
 - [ ] Unified Wi-Fi connection state machine (queue-based, single owner)
-- [ ] Configurable proxy support
 - [ ] Proxy: resolve gateway hostnames, not just IP addresses
 - [ ] Proxy: forward POST request bodies
 - [ ] Test more Nokia Symbian devices
@@ -223,6 +225,7 @@ satura-bridge/
 │   ├── main.c                   # Entry point
 │   ├── app_state.c/.h           # Bridge state machine
 │   ├── wifi_manager.c/.h        # Wi-Fi connect, retry, recovery
+│   ├── proxy_gateway.c/.h       # Proxy
 │   ├── bt_pan.c/.h              # Bluetooth PAN / BNEP handling
 │   ├── nat_bridge.c/.h          # NAT between BT and Wi-Fi interfaces
 │   ├── dns_server.c/.h          # DNS server with caching and captive replies
@@ -234,7 +237,7 @@ satura-bridge/
 │   └── btstack_config.h         # BTstack configuration
 ├── components/                  # BTstack and dependencies
 ├── firmware/
-│   └── satura-bridge-v0.0.11.bin # Prebuilt firmware
+│   └── satura-bridge-v0.0.12.bin # Prebuilt firmware
 ├── sdkconfig.defaults           # Build configuration
 ├── FLASH.md                     # Flashing instructions
 └── README.md
@@ -331,6 +334,7 @@ Satura Bridge в первую очередь рассчитан на устро�
 - Captive portal для первоначальной настройки
 - Автоматическое подключение к сохранённой Wi-Fi сети после включения
 - Поддержка до 6 сохранённых Wi-Fi сетей с подключением к сети с самым сильным сигналом
+- Поддержка HTTP прокси (например, прокси для сжатия трафика)
 - Автоматическое восстановление соединения
 - Watchdog, способный перезапускать зависшие компоненты без полной перезагрузки устройства
 - Прошивка одним файлом
@@ -393,6 +397,7 @@ Satura Bridge в первую очередь рассчитан на устро�
 | `/` | Статус, RSSI, время работы, информация о heap |
 | `/setup` | Настройка Wi-Fi вручную |
 | `/networks` | Сканирование, добавление и удаление сохранённых Wi-Fi сетей |
+| `/proxy` | Настройки HTTP прокси |
 | `/reset` | Удаление всех сохранённых Wi-Fi сетей |
 | `/reboot` | Перезагрузка устройства |
 
@@ -457,8 +462,8 @@ Satura Bridge в первую очередь рассчитан на стары�
 - [x] Watchdog и механизмы восстановления
 - [x] Модульный рефакторинг кодовой базы
 - [x] Несколько сохранённых Wi-Fi сетей с UI сканирования и подключения
+- [ ] Поддерка HTTP прокси
 - [ ] Единый конечный автомат для WiFi-подключений (с очередью команд)
-- [ ] Настраиваемая поддержка прокси
 - [ ] Прокси: резолвинг доменных имён гейтвея, не только IP
 - [ ] Прокси: пересылка тела POST-запросов
 - [ ] Протестировать больше устройств Nokia на Symbian
@@ -494,6 +499,7 @@ satura-bridge/
 │   ├── main.c                   # Точка входа
 │   ├── app_state.c/.h           # Конечный автомат состояния моста
 │   ├── wifi_manager.c/.h        # Подключение, повторы, восстановление Wi-Fi
+│   ├── proxy_gateway.c/.h       # Прокси
 │   ├── bt_pan.c/.h              # Обработка Bluetooth PAN / BNEP
 │   ├── nat_bridge.c/.h          # NAT между интерфейсами BT и Wi-Fi
 │   ├── dns_server.c/.h          # DNS-сервер с кэшем и captive-ответами
@@ -505,7 +511,7 @@ satura-bridge/
 │   └── btstack_config.h         # Конфигурация BTstack
 ├── components/                  # BTstack и зависимости
 ├── firmware/
-│   └── satura-bridge-v0.0.11.bin # Готовая прошивка
+│   └── satura-bridge-v0.0.12.bin # Готовая прошивка
 ├── sdkconfig.defaults           # Конфигурация сборки
 ├── FLASH.md                     # Инструкция по прошивке
 └── README.md
