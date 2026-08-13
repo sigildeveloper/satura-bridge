@@ -67,3 +67,31 @@ Satura Bridge can now store and manage multiple Wi-Fi networks instead of relyin
 * Updated firmware and documentation version references
 
 This release builds on the modular codebase introduced in v0.0.10 and adds a more practical Wi-Fi management system for devices that may move between multiple networks.
+
+## [0.0.12] - 2026-08-13
+
+### HTTP Proxy Gateway
+
+Satura Bridge now supports an HTTP proxy gateway for legacy devices and WAP-style proxy services.
+
+### What's new
+
+* **HTTP proxy gateway support**
+* New **`/proxy`** page in the web interface for proxy configuration
+* Proxy settings are stored and applied by the bridge
+* Added a dedicated `proxy_gateway` module to keep proxy functionality separate from the main bridge logic
+* Support for legacy HTTP proxy gateways, including WAP compression proxy use cases
+* Improved compatibility with legacy browsers and applications that rely on HTTP proxy access
+
+### Compatibility & Testing
+
+* Tested HTTP connectivity with legacy mobile software
+* Existing multi-network Wi-Fi management from v0.0.11 is retained
+
+### Firmware
+
+* Added prebuilt `satura-bridge-v0.0.12.bin`
+* Updated firmware and documentation version references
+
+This release adds the first dedicated proxy functionality to Satura Bridge, allowing the bridge to work with HTTP proxy gateways used by some legacy mobile Internet services and applications.
+
