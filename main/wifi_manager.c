@@ -1,5 +1,4 @@
 #include <stdlib.h>
-
 #include <string.h>
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -8,6 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/portmacro.h"
+#include "freertos/queue.h"
 
 #include "wifi_manager.h"
 #include "app_state.h"
@@ -16,68 +16,85 @@
 
 static const char *TAG = "wifi_mgr";
 
-#define WIFI_MAX_RETRIES     7
-#define WIFI_RETRY_BASE_MS   1000
-#define WIFI_RETRY_MAX_MS    30000
+#define WIFI_RETRY_BASE_MS       1000
+#define WIFI_RETRY_MAX_MS        30000
+#define WIFI_FULL_RETRY_DELAY_MS 15000
+#define CAND_MAX_ATTEMPTS        2
 
-#define WIFI_SCAN_TIMEOUT_MS 5000
+/* ============================================================
+ * FSM types
+ * ============================================================ */
 
-#define CAND_MAX_ATTEMPTS 2
+typedef enum {
+    WFSM_IDLE,
+    WFSM_CONNECTING,
+    WFSM_CONNECTED,
+    WFSM_RETRY_WAIT,
+    WFSM_RECOVERING,
+} wifi_fsm_state_t;
 
-static int candidate_attempt = 0;
+typedef enum {
+    WEVT_CONNECT_REQUEST,
+    WEVT_SCAN_REQUEST,
+    WEVT_FORGET_REQUEST,
+    WEVT_RECOVERY_REQUEST,
+    WEVT_DISCONNECTED,
+    WEVT_GOT_IP,
+} wifi_evt_type_t;
 
-static volatile bool scan_in_progress = false;
-static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
-static int scan_result_count = 0;
-static portMUX_TYPE scan_mux = portMUX_INITIALIZER_UNLOCKED;
+typedef struct {
+    wifi_evt_type_t type;
+    esp_ip4_addr_t  ip; /* only valid for WEVT_GOT_IP */
+} wifi_evt_t;
 
-/* Index into the saved-network list currently being attempted, and the
- * ranked candidate list built from scan + saved networks */
+typedef enum {
+    RETRY_REASON_NONE,
+    RETRY_REASON_INITIAL_FAILED,   /* never had an IP this cycle */
+    RETRY_REASON_LOST_CONNECTION,  /* was bridging, connection dropped */
+} retry_reason_t;
+
+/* ============================================================
+ * State — all owned exclusively by wifi_worker_task. Only the
+ * mux-protected copies below (wifi_ssid/wifi_ip/etc.) are read by
+ * other tasks, via the getter functions.
+ * ============================================================ */
+
+static QueueHandle_t wifi_evt_queue = NULL;
+static wifi_fsm_state_t fsm_state = WFSM_IDLE;
+static retry_reason_t   retry_reason = RETRY_REASON_NONE;
+static uint32_t         retry_delay_ms = WIFI_RETRY_BASE_MS;
+
 static wifi_network_t candidate_list[WIFI_MAX_SAVED_NETWORKS];
 static int candidate_rssi[WIFI_MAX_SAVED_NETWORKS];
-static int candidate_count = 0;
-static int candidate_index = 0;
+static int candidate_count   = 0;
+static int candidate_index   = 0;
+static int candidate_attempt = 0;
 
-static portMUX_TYPE wifi_mux = portMUX_INITIALIZER_UNLOCKED;
-
-static char wifi_ssid[64] = {0};
-static char wifi_pass[64] = {0};
-static char wifi_ip[16]   = "--";
-
-static volatile bool wifi_ignore_disconnect  = false;
-static volatile int  wifi_retries            = 0;
-static volatile uint32_t wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
-
-static wifi_manager_state_cb_t state_change_cb = NULL;
-
-static volatile bool wifi_retry_running    = false;
-static volatile bool wifi_recovery_running = false;
+static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
+static int scan_result_count = 0;
 
 static esp_netif_t *sta_netif = NULL;
+static wifi_manager_state_cb_t state_change_cb = NULL;
 
 static esp_event_handler_instance_t wifi_evt_inst = NULL;
 static esp_event_handler_instance_t ip_evt_inst   = NULL;
 
-static void wifi_retry_task(void *arg);
-static void wifi_recovery_task(void *arg);
-static void wifi_soft_reset(void);
+/* Mux-protected fields shared with other tasks via getters */
+static portMUX_TYPE wifi_mux = portMUX_INITIALIZER_UNLOCKED;
+static char wifi_ssid[64] = {0};
+static char wifi_pass[64] = {0};
+static char wifi_ip[16]   = "--";
+
 static void wifi_event_handler(void *arg, esp_event_base_t base,
                                 int32_t id, void *data);
-
-static void process_scan_results(void);
-static void build_candidate_list(void);
+static void wifi_soft_reset(void);
 
 /* ============================================================
- * Credentials
+ * Public: credentials / multi-network storage
  * ============================================================ */
 
 void wifi_manager_set_credentials(const char *ssid, const char *pass) {
     nvs_storage_add_network(ssid, pass);
-}
-
-void wifi_manager_clear_credentials(void) {
-    nvs_storage_clear_networks();
-    esp_wifi_disconnect();
 }
 
 bool wifi_manager_has_credentials(void) {
@@ -86,9 +103,24 @@ bool wifi_manager_has_credentials(void) {
 }
 
 void wifi_manager_load_saved_credentials(void) {
-    /* No-op now — networks are read on-demand from NVS via
-     * wifi_manager_has_credentials() / build_candidate_list(). */
+    /* No-op — networks are read on-demand from NVS. */
 }
+
+int wifi_manager_get_saved_networks(wifi_network_t *out, int max_count) {
+    return nvs_storage_load_networks(out, max_count);
+}
+
+bool wifi_manager_add_network(const char *ssid, const char *pass) {
+    return nvs_storage_add_network(ssid, pass);
+}
+
+bool wifi_manager_remove_network(int index) {
+    return nvs_storage_remove_network(index);
+}
+
+/* ============================================================
+ * Public: status getters
+ * ============================================================ */
 
 void wifi_manager_get_ssid(char *out, size_t len) {
     taskENTER_CRITICAL(&wifi_mux);
@@ -105,15 +137,14 @@ void wifi_manager_get_ip(char *out, size_t len) {
 }
 
 void wifi_manager_get_progress(int *current, int *total) {
-    taskENTER_CRITICAL(&scan_mux);
+    /* Read directly — only the worker task ever writes these, and this
+     * is called from other tasks for display purposes only (a stale
+     * read by a tick or two is harmless). */
     int idx = candidate_index;
     int cnt = candidate_count;
-    taskEXIT_CRITICAL(&scan_mux);
-
     if (cnt <= 0) cnt = 1;
-    if (idx >= cnt) idx = cnt - 1;   /* clamp — never show e.g. "2 of 1" */
+    if (idx >= cnt) idx = cnt - 1;
     if (idx < 0) idx = 0;
-
     *current = idx;
     *total   = cnt;
 }
@@ -126,363 +157,61 @@ void wifi_manager_set_state_change_cb(wifi_manager_state_cb_t cb) {
     state_change_cb = cb;
 }
 
-/* ============================================================
- * Connect / retry
- * ============================================================ */
-
-#define WIFI_FULL_RETRY_DELAY_MS 15000
-
-static void full_retry_task(void *arg) {
-    (void)arg;
-    vTaskDelay(pdMS_TO_TICKS(WIFI_FULL_RETRY_DELAY_MS));
-    if (wifi_manager_has_credentials()) {
-        ESP_LOGI(TAG, "[WIFI] retrying full scan+connect after failure");
-        wifi_manager_start_connect();
-    }
-    vTaskDelete(NULL);
-}
-
-static void try_connect_candidate(int idx) {
-    if (idx < 0 || idx >= candidate_count) {
-        ESP_LOGW(TAG, "[WIFI] no more candidates, will retry in %d s",
-                 WIFI_FULL_RETRY_DELAY_MS / 1000);
-        app_state_set(APP_WIFI_FAILED);
-        candidate_count = 0;   /* clear the guard so a new cycle can start */
-        safe_task_create(full_retry_task, "wifi_full_retry", 3072, NULL, 4, NULL);
-        return;
-    }
-
-    if (candidate_attempt == 0) {
-        ESP_LOGI(TAG, "[WIFI] trying candidate %d/%d: %s (rssi %d)",
-                 idx + 1, candidate_count, candidate_list[idx].ssid, candidate_rssi[idx]);
-    } else {
-        ESP_LOGI(TAG, "[WIFI] retrying candidate %d/%d: %s (attempt %d/%d)",
-                 idx + 1, candidate_count, candidate_list[idx].ssid,
-                 candidate_attempt + 1, CAND_MAX_ATTEMPTS);
-    }
-
-    wifi_config_t cfg = {0};
-
-    strncpy((char *)cfg.sta.ssid, candidate_list[idx].ssid, sizeof(cfg.sta.ssid) - 1);
-    strncpy((char *)cfg.sta.password, candidate_list[idx].pass, sizeof(cfg.sta.password) - 1);
-    bool has_pass = (strlen(candidate_list[idx].pass) != 0);
-    cfg.sta.threshold.authmode = has_pass ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
-    cfg.sta.scan_method = WIFI_FAST_SCAN;
-    cfg.sta.pmf_cfg.capable  = true;
-    cfg.sta.pmf_cfg.required = false;
-    esp_wifi_set_config(WIFI_IF_STA, &cfg);
-
-    taskENTER_CRITICAL(&wifi_mux);
-    strncpy(wifi_ssid, candidate_list[idx].ssid, sizeof(wifi_ssid) - 1);
-    strncpy(wifi_pass, candidate_list[idx].pass, sizeof(wifi_pass) - 1);
-    taskEXIT_CRITICAL(&wifi_mux);
-
-    esp_wifi_connect();
-}
-
-static void wifi_connect_flow_task(void *arg) {
-    (void)arg;
-
-    wifi_scan_config_t scan_cfg = {0};
-    esp_wifi_scan_start(&scan_cfg, true);
-    process_scan_results();
-    scan_in_progress = false;
-
-    build_candidate_list();
-   candidate_attempt = 0;
-
-    taskENTER_CRITICAL(&wifi_mux);
-    wifi_retries        = 0;
-    wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
-    taskEXIT_CRITICAL(&wifi_mux);
-
-    if (candidate_count == 0) {
-        ESP_LOGW(TAG, "[WIFI] no saved networks visible");
-        app_state_set(APP_WIFI_FAILED);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    try_connect_candidate(candidate_index);
-    vTaskDelete(NULL);
-}
-
-void wifi_manager_start_connect(void) {
-    /* Guard against concurrent connect cycles by checking real state
-     * instead of a separate flag that could get stuck if a task ever
-     * crashed before clearing it: already connected, already scanning,
-     * or already mid-connect (candidates queued) — any of these means
-     * a cycle is already running, so ignore this request. */
-    if (get_wifi_connected() || scan_in_progress || candidate_count > 0) {
-        ESP_LOGW(TAG, "[WIFI] connect cycle already active, ignoring duplicate request");
-        return;
-    }
-
-    app_state_set(APP_WIFI_CONNECTING);
-    safe_task_create(wifi_connect_flow_task, "wifi_conn", 4096, NULL, 5, NULL);
-}
-
-static void wifi_schedule_retry(uint32_t delay_ms) {
-    bool already;
-    taskENTER_CRITICAL(&wifi_mux);
-    already = wifi_retry_running;
-    if (!already) wifi_retry_running = true;
-    taskEXIT_CRITICAL(&wifi_mux);
-    if (already) return;
-
-    if (xTaskCreate(wifi_retry_task, "wr", 3072,
-                    (void *)(uintptr_t)delay_ms, 4, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "[WIFI] failed to create retry task");
-        taskENTER_CRITICAL(&wifi_mux);
-        wifi_retry_running = false;
-        taskEXIT_CRITICAL(&wifi_mux);
-    }
-}
-
-static void wifi_retry_task(void *arg) {
-    uint32_t delay = (uint32_t)(uintptr_t)arg;
-    vTaskDelay(pdMS_TO_TICKS(delay));
-
-    if (wifi_manager_has_credentials()) {
-        esp_wifi_disconnect();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        esp_wifi_connect();
-    }
-
-    taskENTER_CRITICAL(&wifi_mux);
-    wifi_retry_running = false;
-    taskEXIT_CRITICAL(&wifi_mux);
-    vTaskDelete(NULL);
-}
-
-/* ============================================================
- * Event handler
- * ============================================================ */
-
-static void wifi_event_handler(void *arg, esp_event_base_t base,
-                                int32_t id, void *data) {
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-
-        taskENTER_CRITICAL(&wifi_mux);
-        bool ignore = wifi_ignore_disconnect;
-        if (ignore) wifi_ignore_disconnect = false;
-        taskEXIT_CRITICAL(&wifi_mux);
-
-        if (ignore) {
-            set_wifi_connected(false);
-            if (state_change_cb) state_change_cb();
-            return;
-        }
-
-        set_wifi_connected(false);
-        if (state_change_cb) state_change_cb();
-        app_state_t st = app_state_get();
-
-        taskENTER_CRITICAL(&wifi_mux);
-        strncpy(wifi_ip, "--", sizeof(wifi_ip));
-        taskEXIT_CRITICAL(&wifi_mux);
-
-        if (st == APP_WIFI_CONNECTING) {
-            candidate_attempt++;
-            if (candidate_attempt < CAND_MAX_ATTEMPTS) {
-                /* Retry the same candidate — the failure may have been a
-                    * transient BT/WiFi radio coexistence hiccup rather than
-                    * a real connectivity problem with this network. */
-                try_connect_candidate(candidate_index);
-            } else {
-                candidate_attempt = 0;
-                candidate_index++;
-                if (candidate_index < candidate_count) {
-                    try_connect_candidate(candidate_index);
-                } else {
-                    ESP_LOGW(TAG, "[WIFI] exhausted all %d candidate(s)", candidate_count);
-                    try_connect_candidate(candidate_index); /* triggers the "no more candidates" branch */
-                }
-            }
-        } else if (st == APP_BRIDGE || st == APP_BRIDGE_NO_WIFI) {
-            bool has_ssid = wifi_manager_has_credentials();
-
-            if (!has_ssid) {
-                app_state_set(APP_NO_WIFI);
-                return;
-            }
-            if (st == APP_BRIDGE) {
-                app_state_set(APP_BRIDGE_NO_WIFI);
-                taskENTER_CRITICAL(&wifi_mux);
-                wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
-                wifi_retries = 0;
-                taskEXIT_CRITICAL(&wifi_mux);
-            }
-
-            taskENTER_CRITICAL(&wifi_mux);
-            wifi_retries++;
-            uint32_t delay = wifi_retry_delay_ms;
-            wifi_retry_delay_ms = (delay * 2 > WIFI_RETRY_MAX_MS)
-                                  ? WIFI_RETRY_MAX_MS : delay * 2;
-            taskEXIT_CRITICAL(&wifi_mux);
-
-            wifi_schedule_retry(delay);
-        }
-
-    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-            ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
-
-            taskENTER_CRITICAL(&wifi_mux);
-            snprintf(wifi_ip, sizeof(wifi_ip), IPSTR, IP2STR(&e->ip_info.ip));
-            taskEXIT_CRITICAL(&wifi_mux);
-
-            /* Connection succeeded — clear the candidate list so the next
-             * wifi_manager_start_connect() call (e.g. after later losing this
-             * connection) isn't blocked by the guard thinking a cycle is
-             * still in progress. */
-            taskENTER_CRITICAL(&scan_mux);
-            candidate_count = 0;
-            candidate_index = 0;
-            taskEXIT_CRITICAL(&scan_mux);
-
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-
-        wifi_ap_record_t ap = {0};
-        if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-            set_wifi_rssi(ap.rssi);
-        }
-
-        set_wifi_connected(true);
-        if (state_change_cb) state_change_cb();
-        bool bt = get_bt_connected();
-        app_state_t st = app_state_get();
-
-        taskENTER_CRITICAL(&wifi_mux);
-        wifi_retries        = 0;
-        wifi_retry_delay_ms = WIFI_RETRY_BASE_MS;
-        taskEXIT_CRITICAL(&wifi_mux);
-
-        if (bt) {
-            app_state_set(APP_BRIDGE);
-        } else if (st != APP_WAIT_BT) {
-            app_state_set(APP_WAIT_BT);
-        }
-    }
-}
-
-/* ============================================================
- * Init / soft reset / recovery
- * ============================================================ */
-
-static void wifi_register_handlers(void) {
-    if (wifi_evt_inst == NULL)
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(
-            WIFI_EVENT, ESP_EVENT_ANY_ID,
-            wifi_event_handler, NULL, &wifi_evt_inst));
-    if (ip_evt_inst == NULL)
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(
-            IP_EVENT, IP_EVENT_STA_GOT_IP,
-            wifi_event_handler, NULL, &ip_evt_inst));
-}
-
-static void wifi_unregister_handlers(void) {
-    if (wifi_evt_inst) {
-        esp_event_handler_instance_unregister(
-            WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_evt_inst);
-        wifi_evt_inst = NULL;
-    }
-    if (ip_evt_inst) {
-        esp_event_handler_instance_unregister(
-            IP_EVENT, IP_EVENT_STA_GOT_IP, ip_evt_inst);
-        ip_evt_inst = NULL;
-    }
-}
-
-void wifi_manager_init(void) {
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    sta_netif = esp_netif_create_default_wifi_sta();
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    wifi_register_handlers();
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-}
-
-static void wifi_soft_reset(void) {
-    ESP_LOGW(TAG, "[WIFI] soft-reset starting...");
-
-    wifi_config_t saved_cfg = {0};
-    esp_wifi_get_config(WIFI_IF_STA, &saved_cfg);
-
-    wifi_unregister_handlers();
-
-    esp_wifi_disconnect();
-    vTaskDelay(pdMS_TO_TICKS(200));
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(100));
-    esp_wifi_deinit();
-    vTaskDelay(pdMS_TO_TICKS(300));
-
-    wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
-    wifi_register_handlers();
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &saved_cfg));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    esp_wifi_connect();
-
-    ESP_LOGI(TAG, "[WIFI] soft-reset done");
-}
-
-static void wifi_recovery_task(void *arg) {
-    (void)arg;
-    wifi_soft_reset();
-    taskENTER_CRITICAL(&wifi_mux);
-    wifi_recovery_running = false;
-    taskEXIT_CRITICAL(&wifi_mux);
-    vTaskDelete(NULL);
-}
-
-/* ============================================================
- * Multi-network management
- * ============================================================ */
-
-int wifi_manager_get_saved_networks(wifi_network_t *out, int max_count) {
-    return nvs_storage_load_networks(out, max_count);
-}
-
-bool wifi_manager_add_network(const char *ssid, const char *pass) {
-    return nvs_storage_add_network(ssid, pass);
-}
-
-bool wifi_manager_remove_network(int index) {
-    return nvs_storage_remove_network(index);
-}
-
-/* ============================================================
- * Scanning
- * ============================================================ */
-
 bool wifi_manager_scan_in_progress(void) {
-    return scan_in_progress;
+    return fsm_state == WFSM_CONNECTING; /* scanning happens as part of connecting */
 }
 
 int wifi_manager_get_scan_results(wifi_scan_result_t *out, int max_count) {
-    int n;
-    taskENTER_CRITICAL(&scan_mux);
-    n = scan_result_count;
+    int n = scan_result_count;
     if (n > max_count) n = max_count;
     memcpy(out, scan_results, sizeof(wifi_scan_result_t) * n);
-    taskEXIT_CRITICAL(&scan_mux);
     return n;
 }
 
-static void process_scan_results(void) {
+/* ============================================================
+ * Public: requests — all just post to the queue. The worker task
+ * is the sole owner of WiFi state; nothing else touches it directly.
+ * ============================================================ */
+
+static void wifi_post_evt(wifi_evt_type_t type) {
+    if (!wifi_evt_queue) return;
+    wifi_evt_t evt = { .type = type };
+    if (xQueueSend(wifi_evt_queue, &evt, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "[WIFI] event queue full, dropping event %d", (int)type);
+    }
+}
+
+void wifi_manager_start_connect(void) {
+    wifi_post_evt(WEVT_CONNECT_REQUEST);
+}
+
+void wifi_manager_scan_start(void) {
+    wifi_post_evt(WEVT_SCAN_REQUEST);
+}
+
+void wifi_manager_clear_credentials(void) {
+    wifi_post_evt(WEVT_FORGET_REQUEST);
+}
+
+void wifi_manager_schedule_recovery(void) {
+    wifi_post_evt(WEVT_RECOVERY_REQUEST);
+}
+
+/* ============================================================
+ * Scanning helpers — pure functions, no FSM/task state of their own
+ * ============================================================ */
+
+static void run_blocking_scan_and_store_results(void) {
+    wifi_scan_config_t scan_cfg = {0};
+    esp_wifi_scan_start(&scan_cfg, true);
+
     uint16_t ap_count = 0;
     esp_wifi_scan_get_ap_num(&ap_count);
     if (ap_count == 0) {
-        taskENTER_CRITICAL(&scan_mux);
         scan_result_count = 0;
-        taskEXIT_CRITICAL(&scan_mux);
         return;
     }
-    if (ap_count > 32) ap_count = 32; /* sanity cap for the temp buffer */
+    if (ap_count > 32) ap_count = 32;
 
     wifi_ap_record_t *records = malloc(sizeof(wifi_ap_record_t) * ap_count);
     if (!records) return;
@@ -496,10 +225,8 @@ static void process_scan_results(void) {
     wifi_network_t saved[WIFI_MAX_SAVED_NETWORKS];
     int saved_count = nvs_storage_load_networks(saved, WIFI_MAX_SAVED_NETWORKS);
 
-    taskENTER_CRITICAL(&scan_mux);
     scan_result_count = 0;
     for (int i = 0; i < actual && scan_result_count < WIFI_MAX_SCAN_RESULTS; i++) {
-        /* Deduplicate by SSID, keep strongest RSSI */
         bool dup = false;
         for (int j = 0; j < scan_result_count; j++) {
             if (strcmp(scan_results[j].ssid, (char *)records[i].ssid) == 0) {
@@ -526,29 +253,15 @@ static void process_scan_results(void) {
         scan_results[scan_result_count].saved = is_saved;
         scan_result_count++;
     }
-    taskEXIT_CRITICAL(&scan_mux);
 
     free(records);
 }
 
-/* Build a ranked candidate list: saved networks that are currently
- * visible, sorted by descending RSSI. Called right before we start
- * trying to connect. */
 static void build_candidate_list(void) {
     wifi_network_t saved[WIFI_MAX_SAVED_NETWORKS];
     int saved_count = nvs_storage_load_networks(saved, WIFI_MAX_SAVED_NETWORKS);
 
-    ESP_LOGI(TAG, "[DEBUG] saved_count=%d, scan_result_count=%d", saved_count, scan_result_count);
-    for (int i = 0; i < saved_count; i++) {
-        ESP_LOGI(TAG, "[DEBUG] saved[%d] = '%s'", i, saved[i].ssid);
-    }
-    for (int i = 0; i < scan_result_count; i++) {
-        ESP_LOGI(TAG, "[DEBUG] scan_results[%d] = '%s' rssi=%d", i, scan_results[i].ssid, scan_results[i].rssi);
-    }
-
     candidate_count = 0;
-
-    taskENTER_CRITICAL(&scan_mux);
     for (int i = 0; i < saved_count; i++) {
         int best_rssi = -127;
         bool visible = false;
@@ -559,14 +272,13 @@ static void build_candidate_list(void) {
             }
         }
         if (visible) {
-            candidate_list[candidate_count]  = saved[i];
-            candidate_rssi[candidate_count]  = best_rssi;
+            candidate_list[candidate_count] = saved[i];
+            candidate_rssi[candidate_count] = best_rssi;
             candidate_count++;
         }
     }
-    taskEXIT_CRITICAL(&scan_mux);
 
-    /* Simple insertion sort by descending RSSI — candidate_count <= 6 */
+    /* Insertion sort by descending RSSI — candidate_count <= 6 */
     for (int i = 1; i < candidate_count; i++) {
         wifi_network_t key_net = candidate_list[i];
         int key_rssi = candidate_rssi[i];
@@ -583,28 +295,342 @@ static void build_candidate_list(void) {
     candidate_index = 0;
 }
 
-static void wifi_scan_task(void *arg) {
-    (void)arg;
-    wifi_scan_config_t scan_cfg = {0};
-    esp_wifi_scan_start(&scan_cfg, true); /* blocking scan, runs in this task */
-    process_scan_results();
-    scan_in_progress = false;
-    vTaskDelete(NULL);
-}
+/* ============================================================
+ * Connect helpers
+ * ============================================================ */
 
-void wifi_manager_scan_start(void) {
-    if (scan_in_progress) return;
-    scan_in_progress = true;
-    safe_task_create(wifi_scan_task, "wifi_scan", 4096, NULL, 4, NULL);
-}
-
-void wifi_manager_schedule_recovery(void) {
-    bool already;
-    taskENTER_CRITICAL(&wifi_mux);
-    already = wifi_recovery_running;
-    if (!already) wifi_recovery_running = true;
-    taskEXIT_CRITICAL(&wifi_mux);
-    if (!already) {
-        safe_task_create(wifi_recovery_task, "wifi_rec", 3072, NULL, 5, NULL);
+static void connect_to_candidate(int idx) {
+    if (candidate_attempt == 0) {
+        ESP_LOGI(TAG, "[WIFI] trying candidate %d/%d: %s (rssi %d)",
+                 idx + 1, candidate_count, candidate_list[idx].ssid, candidate_rssi[idx]);
+    } else {
+        ESP_LOGI(TAG, "[WIFI] retrying candidate %d/%d: %s (attempt %d/%d)",
+                 idx + 1, candidate_count, candidate_list[idx].ssid,
+                 candidate_attempt + 1, CAND_MAX_ATTEMPTS);
     }
+
+    wifi_config_t cfg = {0};
+    strncpy((char *)cfg.sta.ssid, candidate_list[idx].ssid, sizeof(cfg.sta.ssid) - 1);
+    strncpy((char *)cfg.sta.password, candidate_list[idx].pass, sizeof(cfg.sta.password) - 1);
+    bool has_pass = (strlen(candidate_list[idx].pass) != 0);
+    cfg.sta.threshold.authmode = has_pass ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+    cfg.sta.scan_method = WIFI_FAST_SCAN;
+    cfg.sta.pmf_cfg.capable  = true;
+    cfg.sta.pmf_cfg.required = false;
+    esp_wifi_set_config(WIFI_IF_STA, &cfg);
+
+    taskENTER_CRITICAL(&wifi_mux);
+    strncpy(wifi_ssid, candidate_list[idx].ssid, sizeof(wifi_ssid) - 1);
+    strncpy(wifi_pass, candidate_list[idx].pass, sizeof(wifi_pass) - 1);
+    taskEXIT_CRITICAL(&wifi_mux);
+
+    esp_wifi_connect();
+}
+
+/* Starts a fresh scan+connect cycle. Returns the timeout to wait for
+ * (only relevant if it immediately fails and enters RETRY_WAIT). */
+static void start_connect_cycle(void) {
+    app_state_set(APP_WIFI_CONNECTING);
+
+    run_blocking_scan_and_store_results();
+    build_candidate_list();
+    candidate_attempt = 0;
+
+    if (candidate_count == 0) {
+        ESP_LOGW(TAG, "[WIFI] no saved networks visible, will retry in %d s",
+                 WIFI_FULL_RETRY_DELAY_MS / 1000);
+        app_state_set(APP_WIFI_FAILED);
+        fsm_state = WFSM_RETRY_WAIT;
+        retry_reason = RETRY_REASON_INITIAL_FAILED;
+        return;
+    }
+
+    fsm_state = WFSM_CONNECTING;
+    connect_to_candidate(candidate_index);
+}
+
+/* ============================================================
+ * Worker task — the single owner of all WiFi decision-making
+ * ============================================================ */
+
+static uint32_t next_wait_ms = 0; /* 0 means "wait forever" */
+
+static TickType_t wait_ticks(void) {
+    return next_wait_ms == 0 ? portMAX_DELAY : pdMS_TO_TICKS(next_wait_ms);
+}
+
+static void handle_timeout(void) {
+    switch (fsm_state) {
+        case WFSM_RETRY_WAIT:
+            if (!wifi_manager_has_credentials()) {
+                fsm_state = WFSM_IDLE;
+                next_wait_ms = 0;
+                return;
+            }
+            ESP_LOGI(TAG, "[WIFI] retry timer fired, starting a new connect cycle");
+            start_connect_cycle();
+            break;
+        default:
+            /* Shouldn't normally happen — no timeout should be armed
+             * outside RETRY_WAIT. */
+            break;
+    }
+}
+
+static void handle_event(const wifi_evt_t *evt) {
+    switch (fsm_state) {
+
+        case WFSM_IDLE:
+            switch (evt->type) {
+                case WEVT_CONNECT_REQUEST:
+                    if (wifi_manager_has_credentials()) start_connect_cycle();
+                    else app_state_set(APP_NO_WIFI);
+                    break;
+                case WEVT_SCAN_REQUEST:
+                    run_blocking_scan_and_store_results();
+                    break;
+                case WEVT_FORGET_REQUEST:
+                    nvs_storage_clear_networks();
+                    esp_wifi_disconnect();
+                    app_state_set(APP_NO_WIFI);
+                    break;
+                case WEVT_RECOVERY_REQUEST:
+                    /* Nothing active to recover. */
+                    break;
+                default:
+                    break; /* stray DISCONNECTED/GOT_IP — ignore */
+            }
+            break;
+
+        case WFSM_CONNECTING:
+            switch (evt->type) {
+                case WEVT_GOT_IP: {
+                    taskENTER_CRITICAL(&wifi_mux);
+                    snprintf(wifi_ip, sizeof(wifi_ip), IPSTR, IP2STR(&evt->ip));
+                    taskEXIT_CRITICAL(&wifi_mux);
+
+                    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+                    wifi_ap_record_t ap = {0};
+                    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) set_wifi_rssi(ap.rssi);
+
+                    set_wifi_connected(true);
+                    if (state_change_cb) state_change_cb();
+
+                    retry_delay_ms = WIFI_RETRY_BASE_MS;
+                    fsm_state = WFSM_CONNECTED;
+                    next_wait_ms = 0;
+
+                    bool bt = get_bt_connected();
+                    if (bt) app_state_set(APP_BRIDGE);
+                    else if (app_state_get() != APP_WAIT_BT) app_state_set(APP_WAIT_BT);
+                    break;
+                }
+                case WEVT_DISCONNECTED:
+                    candidate_attempt++;
+                    if (candidate_attempt < CAND_MAX_ATTEMPTS) {
+                        connect_to_candidate(candidate_index);
+                    } else {
+                        candidate_attempt = 0;
+                        candidate_index++;
+                        if (candidate_index < candidate_count) {
+                            connect_to_candidate(candidate_index);
+                        } else {
+                            ESP_LOGW(TAG, "[WIFI] exhausted all %d candidate(s), will retry in %d s",
+                                     candidate_count, WIFI_FULL_RETRY_DELAY_MS / 1000);
+                            app_state_set(APP_WIFI_FAILED);
+                            candidate_count = 0;
+                            fsm_state = WFSM_RETRY_WAIT;
+                            retry_reason = RETRY_REASON_INITIAL_FAILED;
+                            next_wait_ms = WIFI_FULL_RETRY_DELAY_MS;
+                        }
+                    }
+                    break;
+                case WEVT_FORGET_REQUEST:
+                    nvs_storage_clear_networks();
+                    esp_wifi_disconnect();
+                    app_state_set(APP_NO_WIFI);
+                    fsm_state = WFSM_IDLE;
+                    next_wait_ms = 0;
+                    break;
+                default:
+                    break; /* duplicate CONNECT/SCAN/RECOVERY while busy — ignore */
+            }
+            break;
+
+        case WFSM_CONNECTED:
+            switch (evt->type) {
+                case WEVT_DISCONNECTED: {
+                    set_wifi_connected(false);
+                    if (state_change_cb) state_change_cb();
+
+                    taskENTER_CRITICAL(&wifi_mux);
+                    strncpy(wifi_ip, "--", sizeof(wifi_ip));
+                    taskEXIT_CRITICAL(&wifi_mux);
+
+                    bool has_ssid = wifi_manager_has_credentials();
+                    if (!has_ssid) {
+                        app_state_set(APP_NO_WIFI);
+                        fsm_state = WFSM_IDLE;
+                        next_wait_ms = 0;
+                        break;
+                    }
+
+                    if (app_state_get() == APP_BRIDGE) {
+                        app_state_set(APP_BRIDGE_NO_WIFI);
+                    }
+                    retry_reason = RETRY_REASON_LOST_CONNECTION;
+                    fsm_state = WFSM_RETRY_WAIT;
+                    next_wait_ms = retry_delay_ms;
+                    retry_delay_ms = (retry_delay_ms * 2 > WIFI_RETRY_MAX_MS)
+                                    ? WIFI_RETRY_MAX_MS : retry_delay_ms * 2;
+                    break;
+                }
+                case WEVT_SCAN_REQUEST:
+                    run_blocking_scan_and_store_results();
+                    break;
+                case WEVT_FORGET_REQUEST:
+                    nvs_storage_clear_networks();
+                    esp_wifi_disconnect();
+                    /* WEVT_DISCONNECTED will follow and drive the state
+                     * transition to IDLE/NO_WIFI. */
+                    break;
+                case WEVT_RECOVERY_REQUEST:
+                    ESP_LOGW(TAG, "[WIFI] recovery requested while connected — resetting");
+                    fsm_state = WFSM_RECOVERING;
+                    wifi_soft_reset();
+                    fsm_state = WFSM_CONNECTING;
+                    next_wait_ms = 0;
+                    break;
+                default:
+                    break; /* CONNECT_REQUEST while already connected — ignore */
+            }
+            break;
+
+        case WFSM_RETRY_WAIT:
+            switch (evt->type) {
+                case WEVT_CONNECT_REQUEST:
+                    ESP_LOGI(TAG, "[WIFI] connect requested, skipping remaining retry wait");
+                    start_connect_cycle();
+                    break;
+                case WEVT_FORGET_REQUEST:
+                    nvs_storage_clear_networks();
+                    app_state_set(APP_NO_WIFI);
+                    fsm_state = WFSM_IDLE;
+                    next_wait_ms = 0;
+                    break;
+                case WEVT_RECOVERY_REQUEST:
+                    fsm_state = WFSM_RECOVERING;
+                    wifi_soft_reset();
+                    fsm_state = WFSM_CONNECTING;
+                    next_wait_ms = 0;
+                    break;
+                default:
+                    break; /* stray DISCONNECTED/GOT_IP from a finished cycle — ignore */
+            }
+            break;
+
+        case WFSM_RECOVERING:
+            /* wifi_soft_reset() runs synchronously; this state is never
+             * actually observed by the event loop. */
+            break;
+    }
+}
+
+static void wifi_worker_task(void *arg) {
+    (void)arg;
+    wifi_evt_t evt;
+
+    while (1) {
+        BaseType_t got = xQueueReceive(wifi_evt_queue, &evt, wait_ticks());
+        if (got == pdTRUE) {
+            handle_event(&evt);
+        } else {
+            handle_timeout();
+        }
+    }
+}
+
+/* ============================================================
+ * esp_event handler — only translates IDF events into our own
+ * queue events. No decision-making happens here.
+ * ============================================================ */
+
+static void wifi_event_handler(void *arg, esp_event_base_t base,
+                                int32_t id, void *data) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_post_evt(WEVT_DISCONNECTED);
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
+        wifi_evt_t evt = { .type = WEVT_GOT_IP, .ip = e->ip_info.ip };
+        if (wifi_evt_queue) xQueueSend(wifi_evt_queue, &evt, 0);
+    }
+}
+
+/* ============================================================
+ * Init / soft reset
+ * ============================================================ */
+
+static void wifi_register_handlers(void) {
+    if (wifi_evt_inst == NULL)
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(
+            WIFI_EVENT, ESP_EVENT_ANY_ID,
+            wifi_event_handler, NULL, &wifi_evt_inst));
+    if (ip_evt_inst == NULL)
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(
+            IP_EVENT, IP_EVENT_STA_GOT_IP,
+            wifi_event_handler, NULL, &ip_evt_inst));
+}
+
+static void wifi_unregister_handlers(void) {
+    if (wifi_evt_inst) {
+        esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_evt_inst);
+        wifi_evt_inst = NULL;
+    }
+    if (ip_evt_inst) {
+        esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, ip_evt_inst);
+        ip_evt_inst = NULL;
+    }
+}
+
+/* Runs synchronously inside the worker task — blocking here is fine,
+ * nothing else can meaningfully happen to WiFi state while this runs. */
+static void wifi_soft_reset(void) {
+    ESP_LOGW(TAG, "[WIFI] soft-reset starting...");
+
+    wifi_config_t saved_cfg = {0};
+    esp_wifi_get_config(WIFI_IF_STA, &saved_cfg);
+
+    wifi_unregister_handlers();
+
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_wifi_stop();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_wifi_deinit();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
+    wifi_register_handlers();
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &saved_cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    esp_wifi_connect();
+
+    ESP_LOGI(TAG, "[WIFI] soft-reset done");
+}
+
+void wifi_manager_init(void) {
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    sta_netif = esp_netif_create_default_wifi_sta();
+
+    wifi_evt_queue = xQueueCreate(8, sizeof(wifi_evt_t));
+    safe_task_create(wifi_worker_task, "wifi_worker", 4096, NULL, 5, NULL);
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    wifi_register_handlers();
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
 }

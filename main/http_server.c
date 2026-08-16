@@ -27,6 +27,9 @@
     " | " PROJECT_VERSION \
     "</p>"
 
+
+#define HEAD_BUF_SIZE 2048
+
 static esp_err_t handler_proxy_relay(httpd_req_t *req);
 
 static httpd_handle_t http_server = NULL;
@@ -363,19 +366,29 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
     /* Read the upstream's status line + headers byte-by-byte until the
      * blank line that ends them. Heap-allocated — 2KB is too much to
      * safely add to an already-deep call stack inside the httpd task. */
-    char *head = malloc(2048);
+    char *head = malloc(HEAD_BUF_SIZE);
     if (!head) return;
     head[0] = '\0';
     int head_len = 0;
-    while (head_len < (int)sizeof(head) - 1) {
-        char c;
-        int n = recv(upstream_sock, &c, 1, 0);
+    bool found_terminator = false;
+
+    while (head_len < HEAD_BUF_SIZE - 1 && !found_terminator) {
+        int n = recv(upstream_sock, head + head_len, HEAD_BUF_SIZE - 1 - head_len, 0);
         if (n <= 0) break;
-        head[head_len++] = c;
+        head_len += n;
         head[head_len] = '\0';
-        if (head_len >= 4 &&
-            head[head_len - 4] == '\r' && head[head_len - 3] == '\n' &&
-            head[head_len - 2] == '\r' && head[head_len - 1] == '\n') break;
+
+        /* Scan from a bit before this chunk started, in case the
+            * \r\n\r\n terminator straddles two recv() calls. */
+        int scan_from = head_len - n - 3;
+        if (scan_from < 0) scan_from = 0;
+        for (int i = scan_from; i + 4 <= head_len; i++) {
+            if (head[i] == '\r' && head[i + 1] == '\n' &&
+                head[i + 2] == '\r' && head[i + 3] == '\n') {
+                found_terminator = true;
+                break;
+            }
+        }
     }
 
     /* Parse "HTTP/1.1 200 OK" -> "200 OK" for httpd_resp_set_status */
@@ -436,9 +449,23 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
         line_start = line_end + 2;
     }
 
+    /* If the read above grabbed some body bytes along with the headers
+    * (a single recv() can return more than just the header block),
+    * forward that leftover chunk first before reading more. */
+    int body_start = -1;
+    for (int i = 0; i + 4 <= head_len; i++) {
+        if (head[i] == '\r' && head[i + 1] == '\n' &&
+            head[i + 2] == '\r' && head[i + 3] == '\n') {
+            body_start = i + 4;
+            break;
+        }
+    }
+    if (body_start >= 0 && body_start < head_len) {
+        httpd_resp_send_chunk(req, head + body_start, head_len - body_start);
+    }
     free(head);
 
-    /* Now relay only the body that follows the header block. */
+    /* Now relay the rest of the body. */
     char buf[512];
     while (1) {
         int n = recv(upstream_sock, buf, sizeof(buf), 0);
