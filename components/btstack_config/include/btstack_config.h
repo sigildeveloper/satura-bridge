@@ -19,18 +19,18 @@
 #define ENABLE_LOG_INFO
 #define ENABLE_PRINTF_HEXDUMP
 
-// ESP32 is dual-mode, но нам нужен только CLASSIC для PAN
+// ESP32 is dual-mode
 #define ENABLE_BLE
 #define ENABLE_CLASSIC
 
-// === CLASSIC (обязательно для PAN) ===
+// === CLASSIC (&#238;&#225;&#255;&#231;&#224;&#242;&#229;&#235;&#252;&#237;&#238; &#228;&#235;&#255; PAN) ===
 #ifdef ENABLE_CLASSIC
 
 // BNEP/PAN support
 #define ENABLE_BNEP
 #define ENABLE_L2CAP
 
-// ACL buffer для Ethernet frames в BNEP (1500 + заголовки)
+// ACL buffer &#228;&#235;&#255; Ethernet frames &#226; BNEP (1500 + &#231;&#224;&#227;&#238;&#235;&#238;&#226;&#234;&#232;)
 #define HCI_ACL_PAYLOAD_SIZE (1691 + 4)
 
 #define HCI_HOST_ACL_PACKET_LEN 1024
@@ -38,7 +38,7 @@
 #define HCI_HOST_SCO_PACKET_LEN 60
 #define HCI_HOST_SCO_PACKET_NUM 10
 
-// Для старых телефонов (Nokia и т.д.)
+// хз
 #define ENABLE_CLASSIC_LEGACY_CONNECTIONS_FOR_SCO_DEMOS
 
 // Link keys
@@ -46,7 +46,7 @@
 
 #endif
 
-// === LE (не критично, но оставим) ===
+// === LE говно, без которого БТСтак как будто не работает норм ===
 #ifdef ENABLE_BLE
 #define ENABLE_ATT_DELAYED_RESPONSE
 #define ENABLE_L2CAP_LE_CREDIT_BASED_FLOW_CONTROL_MODE

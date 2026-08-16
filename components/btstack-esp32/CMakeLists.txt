@@ -32,7 +32,6 @@ set(include_dirs
     ${BTSTACK_ROOT}/3rd-party/yxml
     ${BTSTACK_ROOT}/chipset/zephyr
     ${BTSTACK_ROOT}/src/classic
-    ${BTSTACK_ROOT}/src/ble/gatt-service
     ${BTSTACK_ROOT}/src/ble
     ${BTSTACK_ROOT}/src/le-audio
     ${BTSTACK_ROOT}/src
@@ -53,11 +52,9 @@ set(src_dirs
     ${BTSTACK_ROOT}/3rd-party/micro-ecc
     ${BTSTACK_ROOT}/3rd-party/qr-code-generator
     ${BTSTACK_ROOT}/3rd-party/yxml
-    ${BTSTACK_ROOT}/src/ble/gatt-service
     ${BTSTACK_ROOT}/src/classic
-    ${BTSTACK_ROOT}/chipset/zephyr
     ${BTSTACK_ROOT}/src/ble
-    ${BTSTACK_ROOT}/src/le-audio
+    ${BTSTACK_ROOT}/chipset/zephyr
     ${BTSTACK_ROOT}/src
     ${BTSTACK_ROOT}/platform/embedded
     ${BTSTACK_ROOT}/platform/freertos
@@ -69,6 +66,7 @@ set( exclude_srcs
     ${BTSTACK_ROOT}/platform/embedded/btstack_run_loop_embedded.c
     ${BTSTACK_ROOT}/platform/embedded/btstack_stdin_embedded.c
     ${BTSTACK_ROOT}/platform/embedded/btstack_tlv_flash_bank.c
+    ${BTSTACK_ROOT}/platform/embedded/hci_dump_embedded_stdout.c
     ${BTSTACK_ROOT}/platform/embedded/hci_dump_segger_rtt_binary.c
     ${BTSTACK_ROOT}/platform/embedded/hci_dump_segger_rtt_stdout.c
 )
