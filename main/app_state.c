@@ -2,6 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 #include "app_state.h"
+#include "event_bus.h"
 
 static const char *TAG = "app_state";
 static portMUX_TYPE app_state_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -57,8 +58,13 @@ bool get_bt_connected(void) {
 
 void set_bt_connected(bool connected) {
     taskENTER_CRITICAL(&app_state_mux);
+    bool changed = (bt_connected != connected);
     bt_connected = connected;
     taskEXIT_CRITICAL(&app_state_mux);
+
+    if (changed) {
+        event_bus_publish(connected ? EVENT_BT_CONNECTED : EVENT_BT_DISCONNECTED);
+    }
 }
 
 bool get_wifi_connected(void) {
@@ -71,8 +77,13 @@ bool get_wifi_connected(void) {
 
 void set_wifi_connected(bool connected) {
     taskENTER_CRITICAL(&app_state_mux);
+    bool changed = (wifi_connected != connected);
     wifi_connected = connected;
     taskEXIT_CRITICAL(&app_state_mux);
+
+    if (changed) {
+        event_bus_publish(connected ? EVENT_WIFI_CONNECTED : EVENT_WIFI_DISCONNECTED);
+    }
 }
 
 int8_t get_bt_rssi(void) {

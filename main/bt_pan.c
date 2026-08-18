@@ -29,8 +29,6 @@ static volatile int  bt_reopen_counter  = 0;
 static uint8_t pan_sdp_record[400];
 static btstack_packet_callback_registration_t hci_event_cb;
 
-static bt_pan_state_cb_t state_change_cb = NULL;
-
 static volatile bool rssi_poll_pending = false;
 
 static void bt_reopen_task(void *arg);
@@ -50,10 +48,6 @@ static hci_con_handle_t get_bt_handle(void) {
     h = bt_handle;
     taskEXIT_CRITICAL(&bt_pan_mux);
     return h;
-}
-
-void bt_pan_set_state_change_cb(bt_pan_state_cb_t cb) {
-    state_change_cb = cb;
 }
 
 /* ============================================================
@@ -247,7 +241,6 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
             } else if (can_start) {
                 safe_task_create(wifi_start_task, "wist", 3072, NULL, 5, NULL);
             }
-            if (state_change_cb) state_change_cb();
             break;
         }
 
@@ -273,7 +266,6 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
                 ESP_LOGW(TAG, "[BTR] already running, skip create");
             }
 
-            if (state_change_cb) state_change_cb();
             break;
         }
 

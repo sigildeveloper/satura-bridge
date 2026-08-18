@@ -7,6 +7,7 @@
 #include "nat_bridge.h"
 #include "config.h"
 #include "app_state.h"
+#include "event_bus.h"
 
 static const char *TAG = "nat_bridge";
 static struct netif *bt_netif = NULL;
@@ -44,4 +45,16 @@ static void update_nat_lwip_ctx(void *arg) {
 
 void nat_bridge_update(void) {
     tcpip_callback(update_nat_lwip_ctx, NULL);
+}
+
+static void on_bridge_event(event_type_t type) {
+    (void)type;
+    nat_bridge_update();
+}
+
+void nat_bridge_subscribe(void) {
+    event_bus_subscribe(EVENT_WIFI_CONNECTED, on_bridge_event);
+    event_bus_subscribe(EVENT_WIFI_DISCONNECTED, on_bridge_event);
+    event_bus_subscribe(EVENT_BT_CONNECTED, on_bridge_event);
+    event_bus_subscribe(EVENT_BT_DISCONNECTED, on_bridge_event);
 }

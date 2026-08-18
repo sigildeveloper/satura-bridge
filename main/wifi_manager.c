@@ -74,7 +74,6 @@ static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
 static int scan_result_count = 0;
 
 static esp_netif_t *sta_netif = NULL;
-static wifi_manager_state_cb_t state_change_cb = NULL;
 
 static esp_event_handler_instance_t wifi_evt_inst = NULL;
 static esp_event_handler_instance_t ip_evt_inst   = NULL;
@@ -151,10 +150,6 @@ void wifi_manager_get_progress(int *current, int *total) {
 
 esp_netif_t *wifi_manager_get_sta_netif(void) {
     return sta_netif;
-}
-
-void wifi_manager_set_state_change_cb(wifi_manager_state_cb_t cb) {
-    state_change_cb = cb;
 }
 
 bool wifi_manager_scan_in_progress(void) {
@@ -414,7 +409,6 @@ static void handle_event(const wifi_evt_t *evt) {
                     if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) set_wifi_rssi(ap.rssi);
 
                     set_wifi_connected(true);
-                    if (state_change_cb) state_change_cb();
 
                     retry_delay_ms = WIFI_RETRY_BASE_MS;
                     fsm_state = WFSM_CONNECTED;
@@ -461,7 +455,6 @@ static void handle_event(const wifi_evt_t *evt) {
             switch (evt->type) {
                 case WEVT_DISCONNECTED: {
                     set_wifi_connected(false);
-                    if (state_change_cb) state_change_cb();
 
                     taskENTER_CRITICAL(&wifi_mux);
                     strncpy(wifi_ip, "--", sizeof(wifi_ip));

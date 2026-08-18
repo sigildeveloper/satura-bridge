@@ -188,8 +188,7 @@ int btstack_main(int argc, const char *argv[]) {
         nvs_flash_init();
     }
 
-    wifi_manager_set_state_change_cb(nat_bridge_update);
-    bt_pan_set_state_change_cb(nat_bridge_update);
+    nat_bridge_subscribe();
     wifi_manager_init();
 
     wifi_manager_load_saved_credentials();

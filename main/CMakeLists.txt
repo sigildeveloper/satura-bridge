@@ -12,6 +12,7 @@ idf_component_register(
         "http_server.c"
         "nat_bridge.c"
         "proxy_gateway.c"
+        "event_bus.c"
 
     INCLUDE_DIRS "."
 

@@ -23,9 +23,6 @@ esp_netif_t *wifi_manager_get_sta_netif(void);
 
 void wifi_manager_get_progress(int *current, int *total);
 
-typedef void (*wifi_manager_state_cb_t)(void);
-void wifi_manager_set_state_change_cb(wifi_manager_state_cb_t cb);
-
 #include "nvs_storage.h"
 
 #define WIFI_MAX_SCAN_RESULTS 20
