@@ -190,7 +190,7 @@ Useful information to include:
 * [x] Multiple saved Wi-Fi networks with scan-and-connect UI
 * [x] HTTP proxy gateway support
 * [x] Proxy: forward POST request bodies
-* [ ] Unified Wi-Fi connection state machine (queue-based, single owner)
+* [x] Unified Wi-Fi connection state machine (queue-based, single owner)
 * [ ] Proxy: resolve gateway hostnames, not only IP addresses
 * [ ] Test more Nokia Symbian devices
 * [ ] Test more Sony Ericsson devices
@@ -464,7 +464,7 @@ Satura Bridge в первую очередь предназначен для с�
 * [x] Несколько сохранённых Wi-Fi сетей с UI сканирования и подключения
 * [x] Поддержка HTTP прокси
 * [x] Прокси: пересылка тела POST-запросов
-* [ ] Единый конечный автомат для Wi-Fi подключений (с очередью команд и одним владельцем)
+* [x] Единый конечный автомат для Wi-Fi подключений (с очередью команд и одним владельцем)
 * [ ] Прокси: разрешение имён шлюза, а не только IP-адресов
 * [ ] Протестировать больше устройств Nokia на Symbian
 * [ ] Протестировать больше устройств Sony Ericsson
