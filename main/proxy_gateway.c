@@ -1,8 +1,7 @@
 #include <string.h>
-#include "nvs.h"
+#include "storage.h"
 #include "proxy_gateway.h"
 
-#define NVS_NAMESPACE   "satura"
 #define NVS_KEY_PX_EN   "px_en"
 #define NVS_KEY_PX_HOST "px_host"
 #define NVS_KEY_PX_PORT "px_port"
@@ -10,34 +9,22 @@
 void proxy_gateway_load(proxy_gateway_config_t *out) {
     memset(out, 0, sizeof(*out));
 
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return;
-
     uint8_t enabled = 0;
-    nvs_get_u8(h, NVS_KEY_PX_EN, &enabled);
+    storage_get_u8(NVS_KEY_PX_EN, &enabled);
     out->enabled = enabled;
 
-    size_t host_len = sizeof(out->host);
-    nvs_get_str(h, NVS_KEY_PX_HOST, out->host, &host_len);
+    storage_get_str(NVS_KEY_PX_HOST, out->host, sizeof(out->host));
 
     uint16_t port = 0;
-    nvs_get_u16(h, NVS_KEY_PX_PORT, &port);
+    storage_get_u16(NVS_KEY_PX_PORT, &port);
     out->port = port;
-
-    nvs_close(h);
 }
 
 bool proxy_gateway_save(const proxy_gateway_config_t *cfg) {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-
-    nvs_set_u8(h, NVS_KEY_PX_EN, cfg->enabled ? 1 : 0);
-    nvs_set_str(h, NVS_KEY_PX_HOST, cfg->host);
-    nvs_set_u16(h, NVS_KEY_PX_PORT, cfg->port);
-
-    nvs_commit(h);
-    nvs_close(h);
-    return true;
+    bool ok1 = storage_set_u8(NVS_KEY_PX_EN, cfg->enabled ? 1 : 0);
+    bool ok2 = storage_set_str(NVS_KEY_PX_HOST, cfg->host);
+    bool ok3 = storage_set_u16(NVS_KEY_PX_PORT, cfg->port);
+    return ok1 && ok2 && ok3;
 }
 
 static proxy_gateway_config_t cached_cfg;
