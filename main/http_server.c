@@ -18,7 +18,7 @@
 #include "nvs_storage.h"
 #include "proxy_gateway.h"
 
-#define PROJECT_VERSION "v0.0.13"
+#define PROJECT_VERSION "v0.0.14"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
 #define PAGE_FOOTER \
     "<hr><p>" \

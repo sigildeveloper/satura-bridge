@@ -5,7 +5,7 @@
 Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.13-green.svg)](firmware/)
+[![Version](https://img.shields.io/badge/version-v0.0.14-green.svg)](firmware/)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
@@ -235,9 +235,10 @@ satura-bridge/
 │   ├── uptime.c/.h              # Uptime tracking
 │   ├── config.h                 # Shared constants
 │   └── btstack_config.h         # BTstack configuration
+│   └── watchdog.c/.h            # Single watchdog entry-point
 ├── components/                  # BTstack and dependencies
 ├── firmware/
-│   └── satura-bridge-v0.0.13.bin # Prebuilt firmware
+│   └── satura-bridge-v0.0.14.bin # Prebuilt firmware
 ├── sdkconfig.defaults           # Build configuration
 ├── FLASH.md                     # Flashing instructions
 └── README.md
@@ -509,9 +510,10 @@ satura-bridge/
 │   ├── uptime.c/.h              # Учёт времени работы
 │   ├── config.h                 # Общие константы
 │   └── btstack_config.h         # Конфигурация BTstack
+│   └── watchdog.c/.h            # Единая точка входа смотреть-@
 ├── components/                  # BTstack и зависимости
 ├── firmware/
-│   └── satura-bridge-v0.0.13.bin # Готовая прошивка
+│   └── satura-bridge-v0.0.14.bin # Готовая прошивка
 ├── sdkconfig.defaults           # Конфигурация сборки
 ├── FLASH.md                     # Инструкция по прошивке
 └── README.md

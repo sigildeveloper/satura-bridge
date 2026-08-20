@@ -132,3 +132,16 @@ Satura Bridge now supports HTTP POST requests through the configured proxy and f
 
 * Added prebuilt `satura-bridge-v0.0.13.bin`
 * Updated firmware and documentation version references
+
+## v0.0.14
+
+### Architecture
+- Rewrote the WiFi manager as a single-owner state machine with an
+  event queue — one worker task now owns all connect/scan/retry/
+  recovery decisions, eliminating the guard-flag races from earlier
+  versions
+- Added a lightweight event bus (`event_bus.c`) — WiFi/BT connection
+  state changes now publish events instead of using direct callback
+  wiring between modules
+- Centralized all NVS access behind a `storage.c` abstraction
+- Extracted the watchdog task into its own module
