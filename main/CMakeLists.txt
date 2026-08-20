@@ -14,6 +14,7 @@ idf_component_register(
         "proxy_gateway.c"
         "event_bus.c"
         "storage.c"
+        "watchdog.c"
 
     INCLUDE_DIRS "."
 
