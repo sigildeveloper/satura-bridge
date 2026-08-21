@@ -476,6 +476,19 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
 }
 
 static esp_err_t handler_proxy_relay(httpd_req_t *req) {
+    /* This handler is reached via the wildcard "*" route for ANY path
+     * that isn't an exact match elsewhere — esp_http_server dispatches
+     * purely on the URI path, before any of our own code runs, so the
+     * proxy-enabled/foreign-host checks in handler_root() never apply
+     * here. Re-check the same conditions ourselves; if this isn't
+     * actually a proxy-eligible request, behave like the captive
+     * portal's 404 handler instead of attempting (and failing) a relay. */
+    if (!proxy_gateway_is_enabled() || !is_foreign_host(req)) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "http://" GW_IP_STR "/");
+        return httpd_resp_send(req, NULL, 0);
+    }
+
     char host[128] = {0};
     if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK) {
         httpd_resp_send_500(req);
