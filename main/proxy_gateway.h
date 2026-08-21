@@ -7,6 +7,7 @@ typedef struct {
     bool     enabled;
     char     host[64];
     uint16_t port;
+    char     resolved_ip[16]; /* cached DNS resolution of host, not persisted */
 } proxy_gateway_config_t;
 
 void proxy_gateway_load(proxy_gateway_config_t *out);
