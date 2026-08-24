@@ -2,31 +2,8 @@
 #include "storage.h"
 #include "nvs_storage.h"
 
-#define NVS_KEY_SSID       "ssid"
-#define NVS_KEY_PASS       "pass"
 #define NVS_KEY_NET_COUNT  "net_count"
 #define NVS_KEY_NET_BLOB   "net_blob"
-
-/* ---- Legacy single-network API (unused after migration, kept for safety) ---- */
-
-bool nvs_storage_save(const char *ssid, const char *pass) {
-    bool ok1 = storage_set_str(NVS_KEY_SSID, ssid);
-    bool ok2 = storage_set_str(NVS_KEY_PASS, pass);
-    return ok1 && ok2;
-}
-
-bool nvs_storage_load(char *ssid_out, size_t ssid_len,
-                       char *pass_out, size_t pass_len) {
-    bool ok = storage_get_str(NVS_KEY_SSID, ssid_out, ssid_len)
-           && storage_get_str(NVS_KEY_PASS, pass_out, pass_len)
-           && strlen(ssid_out) > 0;
-    return ok;
-}
-
-void nvs_storage_clear(void) {
-    storage_erase_key(NVS_KEY_SSID);
-    storage_erase_key(NVS_KEY_PASS);
-}
 
 /* ---- Multi-network API ---- */
 

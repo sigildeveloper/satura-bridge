@@ -1,5 +1,7 @@
 #include <string.h>
 #include "http_utils.h"
+#include "config.h"
+#include "wifi_manager.h"
 
 void html_escape(const char *src, char *dst, size_t n) {
     size_t w = 0;
@@ -19,6 +21,28 @@ void set_no_cache(httpd_req_t *req, const char *type) {
     httpd_resp_set_type(req, type);
     httpd_resp_set_hdr(req, "Cache-Control",
                        "no-cache, no-store, must-revalidate");
+}
+
+bool host_matches_bridge(const char *host_no_port) {
+    if (strcmp(host_no_port, GW_IP_STR) == 0) return true;
+    char sta_ip[16] = {0};
+    wifi_manager_get_ip(sta_ip, sizeof(sta_ip));
+    if (sta_ip[0] != '\0' && strcmp(sta_ip, "--") != 0 &&
+        strcmp(host_no_port, sta_ip) == 0) return true;
+    return false;
+}
+
+bool is_foreign_host(httpd_req_t *req) {
+    char host[128] = {0};
+    if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK) {
+        return false;
+    }
+    char host_no_port[128];
+    strncpy(host_no_port, host, sizeof(host_no_port) - 1);
+    host_no_port[sizeof(host_no_port) - 1] = '\0';
+    char *colon = strchr(host_no_port, ':');
+    if (colon) *colon = '\0';
+    return !host_matches_bridge(host_no_port);
 }
 
 void url_encode(const char *src, char *dst, size_t dst_len) {

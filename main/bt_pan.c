@@ -10,7 +10,6 @@
 
 #include "bt_pan.h"
 #include "app_state.h"
-#include "wifi_manager.h"
 #include "task_utils.h"
 
 static const char *TAG = "bt_pan";
@@ -23,7 +22,6 @@ static portMUX_TYPE bt_pan_mux = portMUX_INITIALIZER_UNLOCKED;
 static hci_con_handle_t bt_handle = HCI_CON_HANDLE_INVALID;
 
 static volatile bool bt_reopen_running  = false;
-static volatile bool wifi_start_running = false;
 static volatile int  bt_reopen_counter  = 0;
 
 static uint8_t pan_sdp_record[400];
@@ -32,7 +30,6 @@ static btstack_packet_callback_registration_t hci_event_cb;
 static volatile bool rssi_poll_pending = false;
 
 static void bt_reopen_task(void *arg);
-static void wifi_start_task(void *arg);
 static void hci_packet_handler(uint8_t type, uint16_t ch,
                                 uint8_t *pkt, uint16_t sz);
 static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
@@ -93,25 +90,6 @@ static void bt_reopen_task(void *arg) {
 
     taskENTER_CRITICAL(&bt_pan_mux);
     bt_reopen_running = false;
-    taskEXIT_CRITICAL(&bt_pan_mux);
-    vTaskDelete(NULL);
-}
-
-#define WIFI_KICK_DELAY_MS 3000
-
-static void wifi_start_task(void *arg) {
-    (void)arg;
-    /* The scan monopolizes the shared BT/WiFi radio for a couple of
-     * seconds — give the fresh BNEP handshake time to settle first,
-     * so scanning doesn't destabilize a connection that's still coming up. */
-    vTaskDelay(pdMS_TO_TICKS(WIFI_KICK_DELAY_MS));
-
-    if (get_bt_connected() && !get_wifi_connected()) {
-        wifi_manager_start_connect();
-    }
-
-    taskENTER_CRITICAL(&bt_pan_mux);
-    wifi_start_running = false;
     taskEXIT_CRITICAL(&bt_pan_mux);
     vTaskDelete(NULL);
 }
@@ -210,36 +188,20 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
             }
             set_bt_connected(true);
 
-            bool has_ssid = wifi_manager_has_credentials();
-            app_state_t cur_st = app_state_get();
-
-            /* If WiFi is already connecting (started proactively at boot)
-                * or already active, don't trigger a second, concurrent
-                * connect attempt — just let the in-flight one finish. */
-            bool already_connecting = (cur_st == APP_WIFI_CONNECTING);
-
             taskENTER_CRITICAL(&bt_pan_mux);
-            bt_handle    = h;
-            bool can_start = !wifi_start_running && !already_connecting;
+            bt_handle = h;
             taskEXIT_CRITICAL(&bt_pan_mux);
-
-            bool wc = get_wifi_connected();
-            if (can_start && !wc && has_ssid) {
-                taskENTER_CRITICAL(&bt_pan_mux);
-                wifi_start_running = true;
-                taskEXIT_CRITICAL(&bt_pan_mux);
-            }
 
             ESP_LOGI(TAG, "[BT] BNEP channel opened");
             bt_set_visible(false);
 
-            if (wc) {
+            /* set_bt_connected() above published EVENT_BT_CONNECTED.
+             * wifi_manager owns the decision of whether/when to start
+             * a WiFi connect attempt from here — see on_bt_event() in
+             * wifi_manager.c. We only report app state that is already
+             * known to us here. */
+            if (get_wifi_connected()) {
                 app_state_set(APP_BRIDGE);
-            } else if (!has_ssid) {
-                app_state_set(APP_NO_WIFI);
-                set_wifi_rssi(-100);
-            } else if (can_start) {
-                safe_task_create(wifi_start_task, "wist", 3072, NULL, 5, NULL);
             }
             break;
         }

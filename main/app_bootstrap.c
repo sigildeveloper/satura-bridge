@@ -1,28 +1,15 @@
 /*
- * Satura Bridge — BT PAN <-> WiFi bridge for ESP32 + BTstack
+ * Satura Bridge — application bootstrap.
  *
- * Version: v0.0.9 (Long-Run Stable)
- *
- * Fixes vs v0.0.8:
- *  - wifi_retry_handle race: xTaskCreate now inside critical section (atomic check+create)
- *  - wifi_soft_reset: proper event handler unregister before deinit, no double-register
- *  - wifi_recovery_task: one-at-a-time flag, prevents concurrent recovery storms
- *  - DNS watchdog: uses dedicated kill flag instead of external vTaskDelete (safer cleanup)
- *  - DNS sockets: closed by the task itself on restart signal, not from outside
- *  - bt_reopen_task: one-at-a-time guard, prevents task pile-up on fast BT cycling
- *  - wifi_start_task: one-at-a-time guard
- *  - handler_root static buffer: replaced with stack-local allocation
- *  - gap_read_rssi: called via btstack_run_loop_execute_on_main_thread (thread-safe)
- *  - dns_make_captive_reply: only responds to A-type queries, ignores AAAA/PTR/etc
- *  - Heap warn threshold raised, reboot threshold raised to 8192 for earlier detection
- *  - HTTP server max_open_sockets=2 for captive portal reliability
- *  - wifi_retries fully reset on successful connect in all states
- *  - APP_WIFI_FAILED → wifi_start_connect now resets retry state properly
- *  - nvs_flash_init guard in btstack_main
- *  - All shared task handles protected by state_mux
+ * Owns app_main's counterpart on the BTstack side (btstack_main), the
+ * DHCP config for the captive network, and safe_task_create(), the
+ * shared xTaskCreate wrapper used by every other module. Startup
+ * order: subscribe nat_bridge to the event bus, bring up WiFi (and
+ * connect immediately if credentials are already saved), start the
+ * DHCP/DNS/watchdog/HTTP services, then bring up the BT PAN stack.
  */
 
-#define BTSTACK_FILE__ "pan_wifi_bridge.c"
+#define BTSTACK_FILE__ "app_bootstrap.c"
 
 #include <errno.h>
 
@@ -94,7 +81,9 @@ int btstack_main(int argc, const char *argv[]) {
     (void)argc; (void)argv;
     uptime_init();
 
-    /* FIX: ensure NVS is initialised here in case app_main doesn't do it */
+    /* Redundant with the nvs_flash_init() in main.c's app_main(), but
+     * harmless — nvs_flash_init() is idempotent, and this keeps
+     * btstack_main() safe to call on its own. */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
         ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

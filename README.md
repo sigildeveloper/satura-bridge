@@ -191,7 +191,7 @@ Useful information to include:
 * [x] HTTP proxy gateway support
 * [x] Proxy: forward POST request bodies
 * [x] Unified Wi-Fi connection state machine (queue-based, single owner)
-* [ ] Proxy: resolve gateway hostnames, not only IP addresses
+* [x] Proxy: resolve gateway hostnames, not only IP addresses
 * [ ] Test more Nokia Symbian devices
 * [ ] Test more Sony Ericsson devices
 * [ ] Improve compatibility with older phones
@@ -221,7 +221,7 @@ Components are downloaded automatically through `idf_component.yml`.
 ```text
 satura-bridge/
 ├── main/
-│   ├── pan_wifi_bridge.c        # Core coordination (NAT trigger, watchdog, entry glue)
+│   ├── app_bootstrap.c          # Core coordination (NAT trigger, watchdog, entry glue)
 │   ├── main.c                   # Entry point
 │   ├── app_state.c/.h           # Bridge state machine
 │   ├── wifi_manager.c/.h        # Wi-Fi connection, retry, recovery
@@ -229,7 +229,9 @@ satura-bridge/
 │   ├── bt_pan.c/.h              # Bluetooth PAN / BNEP handling
 │   ├── nat_bridge.c/.h          # NAT between BT and Wi-Fi interfaces
 │   ├── dns_server.c/.h          # DNS server with caching and captive replies
-│   ├── http_server.c/.h         # Web interface (setup, status, captive portal)
+│   ├── http_server.c/.h         # HTTP server startup, URI table
+│   ├── http_routes.c/.h         # UI/config page handlers (setup, status, captive portal)
+│   ├── proxy_relay.c/.h         # Raw-socket relay for /* proxy-gateway traffic
 │   ├── nvs_storage.c/.h         # Wi-Fi credential storage
 │   ├── http_utils.c/.h          # Shared HTTP helpers
 │   ├── uptime.c/.h              # Uptime tracking
@@ -466,7 +468,7 @@ Satura Bridge в первую очередь предназначен для с�
 * [x] Поддержка HTTP прокси
 * [x] Прокси: пересылка тела POST-запросов
 * [x] Единый конечный автомат для Wi-Fi подключений (с очередью команд и одним владельцем)
-* [ ] Прокси: разрешение имён шлюза, а не только IP-адресов
+* [x] Прокси: разрешение имён шлюза, а не только IP-адресов
 * [ ] Протестировать больше устройств Nokia на Symbian
 * [ ] Протестировать больше устройств Sony Ericsson
 * [ ] Улучшить совместимость со старыми телефонами
@@ -496,7 +498,7 @@ idf.py flash monitor
 ```text
 satura-bridge/
 ├── main/
-│   ├── pan_wifi_bridge.c        # Основная координация (запуск NAT, watchdog, точка входа)
+│   ├── app_bootstrap.c          # Основная координация (запуск NAT, watchdog, точка входа)
 │   ├── main.c                   # Точка входа
 │   ├── app_state.c/.h           # Конечный автомат состояния моста
 │   ├── wifi_manager.c/.h        # Подключение, повторные попытки и восстановление Wi-Fi
@@ -504,7 +506,9 @@ satura-bridge/
 │   ├── bt_pan.c/.h              # Обработка Bluetooth PAN / BNEP
 │   ├── nat_bridge.c/.h          # NAT между интерфейсами BT и Wi-Fi
 │   ├── dns_server.c/.h          # DNS-сервер с кэшем и captive-ответами
-│   ├── http_server.c/.h         # Веб-интерфейс (настройка, статус, captive portal)
+│   ├── http_server.c/.h         # Запуск HTTP-сервера, таблица маршрутов
+│   ├── http_routes.c/.h         # Обработчики UI/страниц настройки (setup, статус, captive portal)
+│   ├── proxy_relay.c/.h         # Релей на сырых сокетах для трафика через /*
 │   ├── nvs_storage.c/.h         # Сохранение данных Wi-Fi
 │   ├── http_utils.c/.h          # Общие HTTP-функции
 │   ├── uptime.c/.h              # Учёт времени работы

@@ -1,10 +1,12 @@
 idf_component_register(
     SRCS
-        "pan_wifi_bridge.c"
+        "app_bootstrap.c"
         "main.c"
         "dns_server.c"
         "nvs_storage.c"
         "http_utils.c"
+        "http_routes.c"
+        "proxy_relay.c"
         "app_state.c"
         "wifi_manager.c"
         "bt_pan.c"

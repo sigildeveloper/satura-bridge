@@ -11,6 +11,7 @@
 
 #include "wifi_manager.h"
 #include "app_state.h"
+#include "event_bus.h"
 #include "nvs_storage.h"
 #include "task_utils.h"
 
@@ -20,6 +21,7 @@ static const char *TAG = "wifi_mgr";
 #define WIFI_RETRY_MAX_MS        30000
 #define WIFI_FULL_RETRY_DELAY_MS 15000
 #define CAND_MAX_ATTEMPTS        2
+#define BT_SETTLE_DELAY_MS       3000
 
 /* ============================================================
  * FSM types
@@ -83,6 +85,12 @@ static portMUX_TYPE wifi_mux = portMUX_INITIALIZER_UNLOCKED;
 static char wifi_ssid[64] = {0};
 static char wifi_pass[64] = {0};
 static char wifi_ip[16]   = "--";
+
+/* Guards bt_settle_and_connect_task so a bouncing BT link (repeated
+ * EVENT_BT_CONNECTED) cannot pile up more than one in-flight settle
+ * task. Same one-at-a-time rule the pre-v0.0.14 code used to enforce
+ * from bt_pan.c. */
+static volatile bool bt_settle_running = false;
 
 static void wifi_event_handler(void *arg, esp_event_base_t base,
                                 int32_t id, void *data);
@@ -613,6 +621,47 @@ static void wifi_soft_reset(void) {
     ESP_LOGI(TAG, "[WIFI] soft-reset done");
 }
 
+/* ============================================================
+ * BT PAN integration — react to BT events instead of bt_pan.c
+ * calling into us directly. Keeps wifi_manager the sole owner of
+ * when a WiFi connect attempt starts.
+ * ============================================================ */
+
+static void bt_settle_and_connect_task(void *arg) {
+    (void)arg;
+    /* A WiFi scan/connect monopolizes the shared BT/WiFi radio for a
+     * couple of seconds — give the fresh BNEP handshake time to settle
+     * first, so scanning doesn't destabilize a connection that's still
+     * coming up. */
+    vTaskDelay(pdMS_TO_TICKS(BT_SETTLE_DELAY_MS));
+    wifi_manager_start_connect();
+
+    taskENTER_CRITICAL(&wifi_mux);
+    bt_settle_running = false;
+    taskEXIT_CRITICAL(&wifi_mux);
+    vTaskDelete(NULL);
+}
+
+static void on_bt_event(event_type_t type) {
+    if (type != EVENT_BT_CONNECTED) return;
+    if (get_wifi_connected() || app_state_get() == APP_WIFI_CONNECTING) return;
+
+    if (!wifi_manager_has_credentials()) {
+        app_state_set(APP_NO_WIFI);
+        set_wifi_rssi(-100);
+        return;
+    }
+
+    taskENTER_CRITICAL(&wifi_mux);
+    bool can_start = !bt_settle_running;
+    if (can_start) bt_settle_running = true;
+    taskEXIT_CRITICAL(&wifi_mux);
+
+    if (can_start) {
+        safe_task_create(bt_settle_and_connect_task, "wist", 3072, NULL, 5, NULL);
+    }
+}
+
 void wifi_manager_init(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -620,6 +669,8 @@ void wifi_manager_init(void) {
 
     wifi_evt_queue = xQueueCreate(8, sizeof(wifi_evt_t));
     safe_task_create(wifi_worker_task, "wifi_worker", 4096, NULL, 5, NULL);
+
+    event_bus_subscribe(EVENT_BT_CONNECTED, on_bt_event);
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
