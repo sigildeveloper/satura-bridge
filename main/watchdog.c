@@ -58,6 +58,25 @@ static void watchdog_task(void *arg) {
             (int)(free_heap / 1024), (int)(min_heap / 1024),
             up / 86400, (up % 86400) / 3600, (up % 3600) / 60, up % 60);
 
+        /* httpd stack watchdog — the proxy relay path (handler_proxy_relay
+         * + relay_bytes_httpd) is the deepest call chain that runs on the
+         * httpd worker task, and it's the one that has overflowed in the
+         * past. uxTaskGetStackHighWaterMark reports the *lowest* free
+         * margin seen since boot, in words, so this logs the true worst
+         * case rather than a one-off snapshot. Requires
+         * CONFIG_FREERTOS_USE_TRACE_FACILITY=y for xTaskGetHandle(); if
+         * that's not enabled, httpd_task will be NULL and this is skipped. */
+        TaskHandle_t httpd_task = xTaskGetHandle("httpd");
+        if (httpd_task) {
+            UBaseType_t hwm_words = uxTaskGetStackHighWaterMark(httpd_task);
+            size_t hwm_bytes = (size_t)hwm_words * sizeof(StackType_t);
+            ESP_LOGI(TAG, "[HB] httpd stack headroom: %d bytes", (int)hwm_bytes);
+            if (hwm_bytes < 1024) {
+                ESP_LOGW(TAG, "[WDT] httpd stack margin low: %d bytes",
+                         (int)hwm_bytes);
+            }
+        }
+
         /* WiFi stuck watchdog */
         if (st == APP_BRIDGE_NO_WIFI) {
             if (++wifi_stuck_count >= 10) {
