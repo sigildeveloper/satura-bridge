@@ -41,6 +41,13 @@ CONFIG_PARTITION_TABLE_FILENAME="partitions_singleapp_large.csv"
 CONFIG_ESP_WIFI_IRAM_OPT=n
 CONFIG_ESP_WIFI_RX_IRAM_OPT=n
 
+# -Os is load-bearing: BT + WiFi coexistence is close enough to the
+# IRAM budget (see idf.py size) that -Og/-O0 have been observed to
+# overflow it on the sibling Vetera Bridge project (same BT+WiFi
+# stack). Pin it explicitly so a menuconfig default drift or a fresh
+# clone can't silently regress this.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
 # Не используются проектом
 CONFIG_LWIP_IPV4_NAPT_PORTMAP=n
 CONFIG_LWIP_IPV6=n
