@@ -1,5 +1,6 @@
 #include <string.h>
 #include <strings.h>
+#include <stdlib.h>
 #include "lwip/sockets.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -22,6 +23,20 @@ static bool is_hop_by_hop_header(const char *name) {
 static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
     struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
     setsockopt(upstream_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    /* Bypass esp_http_server's own response API entirely and write raw
+     * bytes to the client socket. httpd_resp_send_chunk() always frames
+     * the body as HTTP/1.1 "Transfer-Encoding: chunked" — fine for a
+     * modern browser, but the WAP/J2ME-era browsers this bridge targets
+     * largely predate chunked encoding and reset the connection when
+     * they receive it instead of a plain Content-Length or
+     * close-delimited body (observed on real hardware: nnproject.cc
+     * relayed successfully per the logs, then ECONNRESET on send/recv
+     * to the *client* socket, empty page). Writing HTTP/1.0 +
+     * Content-Length (or Connection: close if upstream didn't give us a
+     * length) matches what those browsers actually expect. */
+    int client_sock = httpd_req_to_sockfd(req);
+    if (client_sock < 0) return;
 
     /* Read the upstream's status line + headers byte-by-byte until the
      * blank line that ends them. Heap-allocated — 2KB is too much to
@@ -51,7 +66,9 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
         }
     }
 
-    /* Parse "HTTP/1.1 200 OK" -> "200 OK" for httpd_resp_set_status */
+    /* Parse "HTTP/1.1 200 OK" -> "200 OK" — we re-send as HTTP/1.0
+     * regardless of what upstream spoke, since HTTP/1.0 is what tells an
+     * old browser "no keep-alive, no chunked, EOF means end of body". */
     char status[32] = "200 OK";
     char *sp1 = strchr(head, ' ');
     if (sp1) {
@@ -64,11 +81,20 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
             }
         }
     }
-    httpd_resp_set_status(req, status);
 
-    /* Forward every response header except hop-by-hop ones that
-     * esp_http_server manages itself (we're using chunked transfer,
-     * so Content-Length/Transfer-Encoding from upstream would conflict). */
+    /* Build our own status line + header block, forwarding upstream's
+     * headers verbatim except the framing-related ones we control
+     * ourselves (Content-Length is the one exception — we forward its
+     * *value*, just not blindly; Transfer-Encoding/Connection from
+     * upstream are dropped since we dictate our own framing to the
+     * client). */
+    char *out = malloc(HEAD_BUF_SIZE);
+    if (!out) { free(head); return; }
+    int out_len = snprintf(out, HEAD_BUF_SIZE, "HTTP/1.0 %s\r\n", status);
+
+    bool has_content_length = false;
+    size_t upstream_content_length = 0;
+
     char *line_start = strstr(head, "\r\n");
     if (line_start) line_start += 2; /* skip past the status line */
     while (line_start && *line_start && strncmp(line_start, "\r\n", 2) != 0) {
@@ -83,35 +109,41 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
                 memcpy(name, line_start, name_len);
                 name[name_len] = '\0';
 
-                if (!is_hop_by_hop_header(name)) {
-                    char *val_start = colon + 1;
-                    while (*val_start == ' ') val_start++;
-                    size_t val_len = line_end - val_start;
+                char *val_start = colon + 1;
+                while (*val_start == ' ') val_start++;
+                size_t val_len = line_end - val_start;
 
-                    /* httpd_resp_set_hdr() only stores the pointer, not a
-                        * copy — the value must stay valid until the response
-                        * is sent, so allocate it instead of using a stack
-                        * buffer that goes out of scope. */
-                    char *value = malloc(val_len + 1);
-                    if (value) {
-                        memcpy(value, val_start, val_len);
-                        value[val_len] = '\0';
-                        httpd_resp_set_hdr(req, name, value);
-                        /* Intentionally not freed here — esp_http_server
-                            * needs it until the response finishes sending,
-                            * which happens right after this function returns.
-                            * The whole request's memory is reclaimed when the
-                            * connection's task exits. */
+                if (strcasecmp(name, "Content-Length") == 0) {
+                    char lenbuf[32] = {0};
+                    size_t copy_len = val_len < sizeof(lenbuf) - 1 ? val_len : sizeof(lenbuf) - 1;
+                    memcpy(lenbuf, val_start, copy_len);
+                    upstream_content_length = (size_t)strtoul(lenbuf, NULL, 10);
+                    has_content_length = true;
+                    if (out_len < HEAD_BUF_SIZE) {
+                        out_len += snprintf(out + out_len, HEAD_BUF_SIZE - out_len,
+                                             "Content-Length: %s\r\n", lenbuf);
                     }
+                } else if (!is_hop_by_hop_header(name) &&
+                           out_len + (int)(line_end - line_start) + 4 < HEAD_BUF_SIZE) {
+                    memcpy(out + out_len, line_start, line_end - line_start);
+                    out_len += (int)(line_end - line_start);
+                    out[out_len++] = '\r';
+                    out[out_len++] = '\n';
                 }
             }
         }
         line_start = line_end + 2;
     }
 
+    if (out_len < HEAD_BUF_SIZE) {
+        out_len += snprintf(out + out_len, HEAD_BUF_SIZE - out_len, "Connection: close\r\n\r\n");
+    }
+    send(client_sock, out, out_len, 0);
+    free(out);
+
     /* If the read above grabbed some body bytes along with the headers
-    * (a single recv() can return more than just the header block),
-    * forward that leftover chunk first before reading more. */
+     * (a single recv() can return more than just the header block),
+     * forward that leftover chunk first before reading more. */
     int body_start = -1;
     for (int i = 0; i + 4 <= head_len; i++) {
         if (head[i] == '\r' && head[i + 1] == '\n' &&
@@ -120,19 +152,24 @@ static void relay_bytes_httpd(httpd_req_t *req, int upstream_sock) {
             break;
         }
     }
+    size_t body_relayed = 0;
     if (body_start >= 0 && body_start < head_len) {
-        httpd_resp_send_chunk(req, head + body_start, head_len - body_start);
+        send(client_sock, head + body_start, head_len - body_start, 0);
+        body_relayed += (size_t)(head_len - body_start);
     }
     free(head);
 
-    /* Now relay the rest of the body. */
+    /* Now relay the rest of the body. When upstream gave us a
+     * Content-Length, stop exactly there — some upstreams keep the TCP
+     * connection open past the body (keep-alive) and we'd otherwise
+     * block on recv() until our own SO_RCVTIMEO. */
     char buf[512];
-    while (1) {
+    while (!has_content_length || body_relayed < upstream_content_length) {
         int n = recv(upstream_sock, buf, sizeof(buf), 0);
         if (n <= 0) break;
-        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) break;
+        if (send(client_sock, buf, n, 0) <= 0) break;
+        body_relayed += (size_t)n;
     }
-    httpd_resp_send_chunk(req, NULL, 0);
 }
 
 esp_err_t handler_proxy_relay(httpd_req_t *req) {
@@ -144,6 +181,10 @@ esp_err_t handler_proxy_relay(httpd_req_t *req) {
      * actually a proxy-eligible request, behave like the captive
      * portal's 404 handler instead of attempting (and failing) a relay. */
     if (!proxy_gateway_is_enabled() || !is_foreign_host(req)) {
+        char host_dbg[64] = "?";
+        httpd_req_get_hdr_value_str(req, "Host", host_dbg, sizeof(host_dbg));
+        ESP_LOGI(TAG, "not relaying %s (Host: %s) — enabled=%d foreign=%d, redirecting to portal",
+                 req->uri, host_dbg, proxy_gateway_is_enabled(), is_foreign_host(req));
         httpd_resp_set_status(req, "302 Found");
         httpd_resp_set_hdr(req, "Location", "http://" GW_IP_STR "/");
         return httpd_resp_send(req, NULL, 0);
