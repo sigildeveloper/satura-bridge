@@ -153,7 +153,16 @@ static bool dns_forward(int ext_sock, struct sockaddr_in *ext_dns,
     socklen_t fl = sizeof(from);
     int n = recvfrom(ext_sock, reply, DNS_MAX_PACKET, 0,
                      (struct sockaddr *)&from, &fl);
-    if (n >= 12 && reply[0] == query[0] && reply[1] == query[1]) {
+    /* dns_ext_sock is unconnected, so recvfrom() accepts a UDP datagram
+     * from ANY source — without checking that it actually came from the
+     * upstream server we queried, a matching 2-byte transaction ID
+     * (65536 possibilities, trivially guessable/floodable by anyone on
+     * the same WiFi network) would be enough to spoof a DNS reply and
+     * redirect this phone's traffic anywhere, including into the proxy
+     * relay path that forwards Cookie/Content-Type/login form data. */
+    if (n >= 12 && reply[0] == query[0] && reply[1] == query[1] &&
+        from.sin_addr.s_addr == ext_dns->sin_addr.s_addr &&
+        from.sin_port == ext_dns->sin_port) {
         *rlen = n; return true;
     }
     return false;
