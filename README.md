@@ -92,10 +92,10 @@ Starting with v0.0.15, the networking core is transport-agnostic.
                  │   configuration      │
                  └──────────┬───────────┘
                             │
-                 ┌──────────▼───────────┐
+                 ┌──────────▼────────────┐
                  │      nat_bridge       │
                  │ transport-independent │
-                 └──────────┬───────────┘
+                 └──────────┬────────────┘
                             │
                   link_registry / link_iface
                        │                │
