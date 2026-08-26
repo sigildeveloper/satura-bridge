@@ -145,3 +145,60 @@ Satura Bridge now supports HTTP POST requests through the configured proxy and f
   wiring between modules
 - Centralized all NVS access behind a `storage.c` abstraction
 - Extracted the watchdog task into its own module
+
+## [0.0.15] - 2026-08-26
+
+### Added
+
+* Transport-agnostic link abstraction (`link_iface.h` / `link_registry.c`):
+  `nat_bridge` and future code reference `LINK_ROLE_DOWNLINK`/`LINK_ROLE_UPLINK`
+  instead of BT PAN or WiFi directly — lays groundwork for BT PPP, serial/IR
+  downlinks, and Ethernet/modem uplinks without touching `nat_bridge.c` again
+* `EVENT_DOWNLINK_UP/DOWN` and `EVENT_UPLINK_UP/DOWN` generic events on the
+  event bus, published by `bt_pan` and `wifi_manager` alongside their
+  existing BT/WiFi-specific events
+* httpd worker task stack high-water-mark logging in the heartbeat, for
+  empirical stack-margin monitoring instead of static estimates
+
+### Changed
+
+* `bt_pan` no longer calls into `wifi_manager` directly — reacts to
+  `EVENT_BT_CONNECTED` instead, removing the module's WiFi dependency
+* Split `http_server.c` into `http_routes.c` (UI/config pages) and
+  `proxy_relay.c` (raw-socket proxy relay engine); `http_server.c` is now
+  just startup + URI table
+* `proxy_relay`'s response framing to the client rewritten from HTTP/1.1
+  chunked transfer to raw HTTP/1.0 with `Content-Length` passthrough (or
+  `Connection: close`) — chunked encoding was resetting connections on
+  older/retro browsers that predate it
+* Removed the legacy single-network `nvs_storage_save/load/clear` API,
+  unused since the multi-network migration
+* `pan_wifi_bridge.c` renamed to `app_bootstrap.c`, stale version-9
+  changelog comment in its header replaced with a description of what it
+  actually does now
+* Pinned `CONFIG_COMPILER_OPTIMIZATION_SIZE=y` (`-Os`) explicitly — cuts
+  IRAM usage from 79.7% to 74.31% and shrinks the image by ~65 KB;
+  previously relied on the ESP-IDF project template default, which is
+  `-Og` and leaves noticeably less IRAM headroom for the BT+WiFi
+  combination
+
+### Fixed
+
+* DNS forwarder (`dns_server.c`) accepted a spoofed upstream reply from
+  any source on the local network as long as the 16-bit transaction ID
+  matched — now also verifies the reply's source IP and port match the
+  configured upstream DNS server
+* `event_bus.c` had `EVENT_TYPE_COUNT` hardcoded at 4; any event type
+  added past that silently failed to register or fire
+
+### Repo hygiene
+
+* Untracked `components/btstack-esp32/build/` artifacts that had been
+  committed before `build/` was added to `.gitignore`, causing constant
+  local diff noise on every rebuild
+
+### Tested
+
+* Sony Ericsson J108 — BT PAN connect/reconnect, WiFi failover, NAT
+  enable/disable on independent link state changes, proxy relay against
+  nnproject.cc (HTML + CSS + image, no errors)
