@@ -7,9 +7,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/portmacro.h"
+#include "lwip/netif.h"
+#include "lwip/ip4_addr.h"
 
 #include "bt_pan.h"
 #include "app_state.h"
+#include "event_bus.h"
+#include "link_iface.h"
+#include "config.h"
 #include "task_utils.h"
 
 static const char *TAG = "bt_pan";
@@ -34,6 +39,43 @@ static void hci_packet_handler(uint8_t type, uint16_t ch,
                                 uint8_t *pkt, uint16_t sz);
 static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
                                       uint8_t *pkt, uint16_t sz);
+
+/* ============================================================
+ * link_iface_t registration — bt_pan is the downlink (client-facing)
+ * side. get_netif() has to fall back to scanning netif_list by
+ * subnet, the same way nat_bridge.c used to do it directly: bnep_lwip
+ * (the third-party btstack ESP32 port) creates its lwIP netif
+ * internally and never hands back a pointer to it, so there's no
+ * better source. Cached once found — bnep_lwip creates this netif
+ * once at boot and keeps reusing it across BT reconnects. A future
+ * downlink transport that owns its netif directly (unlike bnep_lwip)
+ * doesn't need this workaround at all; it can just return its own
+ * stored pointer.
+ * ============================================================ */
+
+static struct netif *cached_netif = NULL;
+
+static struct netif *bt_pan_get_netif(void) {
+    if (cached_netif) return cached_netif;
+    for (struct netif *p = netif_list; p; p = p->next) {
+        const ip4_addr_t *ip = netif_ip4_addr(p);
+        if (ip4_addr1(ip) == GW_IP0 &&
+            ip4_addr2(ip) == GW_IP1 &&
+            ip4_addr3(ip) == GW_IP2) {
+            cached_netif = p;
+            return p;
+        }
+    }
+    return NULL;
+}
+
+static const link_iface_t bt_pan_link = {
+    .name         = "bt_pan",
+    .role         = LINK_ROLE_DOWNLINK,
+    .init         = NULL, /* registered explicitly at the end of bt_pan_init() */
+    .is_connected = get_bt_connected,
+    .get_netif    = bt_pan_get_netif,
+};
 
 /* ============================================================
  * Accessors
@@ -187,6 +229,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
                 return;
             }
             set_bt_connected(true);
+            event_bus_publish(EVENT_DOWNLINK_UP);
 
             taskENTER_CRITICAL(&bt_pan_mux);
             bt_handle = h;
@@ -208,6 +251,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
 
         case BNEP_EVENT_CHANNEL_CLOSED: {
             set_bt_connected(false);
+            event_bus_publish(EVENT_DOWNLINK_DOWN);
             set_bt_rssi(-100);
 
             taskENTER_CRITICAL(&bt_pan_mux);
@@ -270,6 +314,8 @@ void bt_pan_init(void) {
     bnep_lwip_init();
     bnep_lwip_register_service(BLUETOOTH_SERVICE_CLASS_NAP, 1691);
     bnep_lwip_register_packet_handler(bnep_lwip_packet_handler);
+
+    link_registry_register(&bt_pan_link);
 }
 
 void bt_pan_start(void) {

@@ -4,6 +4,8 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_log.h"
+#include "lwip/netif.h"
+#include "lwip/ip4_addr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/portmacro.h"
@@ -12,6 +14,7 @@
 #include "wifi_manager.h"
 #include "app_state.h"
 #include "event_bus.h"
+#include "link_iface.h"
 #include "nvs_storage.h"
 #include "task_utils.h"
 
@@ -159,6 +162,42 @@ void wifi_manager_get_progress(int *current, int *total) {
 esp_netif_t *wifi_manager_get_sta_netif(void) {
     return sta_netif;
 }
+
+/* ============================================================
+ * link_iface_t registration — WiFi STA is the uplink (WAN-facing)
+ * side. esp_netif_t doesn't publicly expose its underlying lwIP
+ * struct netif* in this IDF version (esp_netif_get_netif_impl turned
+ * out not to be public API here — caught at compile time, not
+ * silently wrong). Fall back to the same proven approach bt_pan.c
+ * already uses for its own netif: scan netif_list and match by IP,
+ * using WiFi's own current IP (from the definitely-public
+ * esp_netif_get_ip_info()) instead of a fixed subnet. Registered from
+ * wifi_manager_init() alongside the EVENT_BT_CONNECTED subscription.
+ * ============================================================ */
+
+static struct netif *wifi_link_get_netif(void) {
+    if (!sta_netif) return NULL;
+    esp_netif_ip_info_t ip_info;
+    if (esp_netif_get_ip_info(sta_netif, &ip_info) != ESP_OK ||
+        ip_info.ip.addr == 0) {
+        return NULL;
+    }
+    for (struct netif *p = netif_list; p; p = p->next) {
+        const ip4_addr_t *ip = netif_ip4_addr(p);
+        if (ip && ip4_addr_get_u32(ip) == ip_info.ip.addr) {
+            return p;
+        }
+    }
+    return NULL;
+}
+
+static const link_iface_t wifi_uplink_link = {
+    .name         = "wifi_sta",
+    .role         = LINK_ROLE_UPLINK,
+    .init         = NULL, /* registered explicitly at the end of wifi_manager_init() */
+    .is_connected = get_wifi_connected,
+    .get_netif    = wifi_link_get_netif,
+};
 
 bool wifi_manager_scan_in_progress(void) {
     return fsm_state == WFSM_CONNECTING; /* scanning happens as part of connecting */
@@ -417,6 +456,7 @@ static void handle_event(const wifi_evt_t *evt) {
                     if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) set_wifi_rssi(ap.rssi);
 
                     set_wifi_connected(true);
+                    event_bus_publish(EVENT_UPLINK_UP);
 
                     retry_delay_ms = WIFI_RETRY_BASE_MS;
                     fsm_state = WFSM_CONNECTED;
@@ -463,6 +503,7 @@ static void handle_event(const wifi_evt_t *evt) {
             switch (evt->type) {
                 case WEVT_DISCONNECTED: {
                     set_wifi_connected(false);
+                    event_bus_publish(EVENT_UPLINK_DOWN);
 
                     taskENTER_CRITICAL(&wifi_mux);
                     strncpy(wifi_ip, "--", sizeof(wifi_ip));
@@ -671,6 +712,7 @@ void wifi_manager_init(void) {
     safe_task_create(wifi_worker_task, "wifi_worker", 4096, NULL, 5, NULL);
 
     event_bus_subscribe(EVENT_BT_CONNECTED, on_bt_event);
+    link_registry_register(&wifi_uplink_link);
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));

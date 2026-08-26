@@ -13,6 +13,7 @@ idf_component_register(
         "uptime.c"
         "http_server.c"
         "nat_bridge.c"
+        "link_registry.c"
         "proxy_gateway.c"
         "event_bus.c"
         "storage.c"

@@ -4,7 +4,7 @@
 
 static const char *TAG = "event_bus";
 
-#define EVENT_TYPE_COUNT     4
+#define EVENT_TYPE_COUNT     8
 #define MAX_HANDLERS_PER_TYPE 4
 
 static event_bus_handler_t handlers[EVENT_TYPE_COUNT][MAX_HANDLERS_PER_TYPE];
