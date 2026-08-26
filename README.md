@@ -2,206 +2,357 @@
 
 **«Bringing old phones back online.»**
 
-Open-source Bluetooth Classic PAN to Wi-Fi Internet gateway for legacy mobile phones and Symbian devices.
+Open-source Bluetooth Classic PAN → Internet gateway for legacy mobile phones and Symbian devices, currently using Wi-Fi as the uplink.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.14-green.svg)](firmware/)
+[![Version](https://img.shields.io/badge/version-v0.0.15-green.svg)](https://github.com/sigildeveloper/satura-bridge/releases/tag/v0.0.15)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
 
 ## What is Satura Bridge?
 
-Satura Bridge is a small ESP32-based Bluetooth Classic PAN to Wi-Fi Internet gateway. It provides Internet access for legacy mobile phones.
+Satura Bridge is a small ESP32-based Bluetooth Classic PAN gateway for legacy mobile phones.
 
-Many older phones, including Nokia Symbian devices, Sony Ericsson phones, and other legacy mobile devices, have Bluetooth but do not have Wi-Fi. In many parts of the world, 2G and 3G networks are being shut down. As a result, these devices can lose mobile Internet access.
+The phone connects through Bluetooth PAN, while the ESP32 currently uses Wi-Fi as its Internet uplink and performs NAT between the two links.
 
-Satura Bridge provides an alternative connection. The phone connects to Satura Bridge through Bluetooth PAN. Satura Bridge connects to a Wi-Fi network for Internet access.
-
-The phone sees a standard Bluetooth PAN network connection. The phone does not need drivers or special software if it supports the required Bluetooth networking profile.
+Many older Nokia Symbian, Sony Ericsson and other legacy devices have Bluetooth but no Wi-Fi. Satura Bridge provides Internet access without requiring special phone software when the device supports the required Bluetooth networking profile.
 
 ```text
 ┌──────────────────┐
 │   Legacy phone   │
 │  Nokia / Symbian │
 └────────┬─────────┘
-         │
          │ Bluetooth Classic / PAN
          ▼
 ┌──────────────────┐
 │  Satura Bridge   │
 │      ESP32       │
 └────────┬─────────┘
-         │
-         │ Wi-Fi
+         │ Wi-Fi uplink
          ▼
 ┌──────────────────┐
 │      Router      │
 └────────┬─────────┘
-         │
          ▼
        Internet
 ```
 
-Satura Bridge is designed mainly for devices that support Bluetooth PAN / NAP. Compatibility can be different for different phones and operating systems. Compatibility testing is in progress.
+> **Current transport support:** Bluetooth Classic PAN as downlink and Wi-Fi as uplink. The transport abstraction is ready for additional implementations, but Bluetooth PPP, Ethernet, Serial/IR and cellular modem transports are not yet user-facing features.
 
-> **Note:** Satura Bridge does not currently provide an Internet connection to Windows 10 devices. Older Android devices have been tested successfully. Some PDAs and other Bluetooth Classic devices can also work.
+> **Compatibility:** Windows 10 Internet connectivity is currently not supported. Older Android devices, Sony Ericsson J108, NetFront 3.4 and J2ME applications have been tested successfully.
 
 ---
 
 ## Features
 
-* Bluetooth Classic networking
-* Bluetooth PAN / NAP support
-* Wi-Fi as the upstream Internet connection
-* NAT / routing between Bluetooth and Wi-Fi
-* Web-based configuration interface
-* Captive portal-style setup
-* Automatic connection to a saved Wi-Fi network at boot
-* Support for up to 6 saved Wi-Fi networks, with connection to the network with the strongest visible signal
-* HTTP proxy gateway support, for example WAP compression gateways
-* Automatic connection recovery
-* Watchdog that can restart stopped components without restarting the complete device
+* Bluetooth Classic PAN / NAP
+* Wi-Fi Internet uplink
+* Transport-agnostic network interface abstraction
+* NAT / routing between active links
+* Event bus for decoupled link-state notifications
+* Web-based configuration
+* Captive-portal-style setup
+* Up to 6 saved Wi-Fi networks
+* Wi-Fi scanning and signal-based network selection
+* Automatic connection recovery and failover
+* Watchdog and component recovery
+* HTTP proxy gateway
+* HTTP POST body forwarding through the proxy
+* Proxy hostname resolution with cached IPv4 address
+* Legacy-browser-friendly HTTP/1.0 proxy response framing
+* DNS forwarding with upstream source verification
+* HTTP worker stack high-water-mark monitoring
+* Explicit `-Os` size optimization
 * Single-file firmware flashing
-* Support for legacy mobile phones and Symbian devices
 
 ---
 
-## Hardware
+## HTTP Proxy Gateway
 
-| Component | Recommended      | Minimum                  |
-| --------- | ---------------- | ------------------------ |
-| Board     | M5Stack Core2    | ESP32-WROOM-32           |
-| Power     | Built-in battery | Any USB 5V supply        |
-| Case      | Already in case  | Optional 3D-printed case |
+Configure the optional HTTP proxy at `/proxy`.
+
+The gateway can be specified using either an IPv4 address or a hostname.
+
+Hostnames are resolved when the proxy configuration is loaded or changed, and the resulting IPv4 address is cached.
+
+The proxy relay supports HTTP requests including POST bodies.
+
+For compatibility with older browsers and WAP software, proxy responses use HTTP/1.0-style framing with `Content-Length` or connection-close semantics instead of HTTP/1.1 chunked encoding.
+
+---
+
+# Architecture
+
+Starting with v0.0.15, the networking core is transport-agnostic.
+
+```text
+                 ┌──────────────────────┐
+                 │      HTTP / DNS      │
+                 │   configuration      │
+                 └──────────┬───────────┘
+                            │
+                 ┌──────────▼───────────┐
+                 │      nat_bridge       │
+                 │ transport-independent │
+                 └──────────┬───────────┘
+                            │
+                  link_registry / link_iface
+                       │                │
+                    DOWNLINK          UPLINK
+                       │                │
+                  ┌────▼────┐      ┌────▼────┐
+                  │ bt_pan  │      │  Wi-Fi  │
+                  └─────────┘      └─────────┘
+```
+
+### `link_iface`
+
+`link_iface_t` provides a generic interface for a network link.
+
+The networking core does not need to know whether the underlying link is Bluetooth, Wi-Fi, Ethernet, a cellular modem or another transport.
+
+### `link_registry`
+
+`link_registry` keeps track of the currently active link for each role:
+
+* `DOWNLINK`
+* `UPLINK`
+
+### `nat_bridge`
+
+`nat_bridge` performs the bridge/NAT functionality through the generic link interface instead of depending directly on Bluetooth PAN or Wi-Fi.
+
+This makes it possible to add new transports without rewriting the NAT, HTTP or DNS layers.
+
+### Event bus
+
+Generic link state events are available:
+
+* `EVENT_DOWNLINK_UP`
+* `EVENT_DOWNLINK_DOWN`
+* `EVENT_UPLINK_UP`
+* `EVENT_UPLINK_DOWN`
+
+Transport-specific modules can publish these events alongside their own transport-specific events.
+
+### Future transports
+
+The architecture is intended to allow implementations such as:
+
+* Bluetooth PPP
+* Serial / IR
+* Ethernet
+* Cellular / 4G / 5G modem
+* Other network interfaces
+
+These are **not currently implemented as user-facing transports**.
+
+---
+
+# v0.0.15
+
+v0.0.15 is primarily an **architecture, reliability and hardening release**.
+
+## Transport abstraction
+
+* Added `link_iface_t`.
+* Added `link_registry`.
+* `nat_bridge` no longer depends directly on BT PAN or Wi-Fi.
+* Added generic downlink/uplink link-state events.
+* Added the foundation for future Bluetooth PPP, Serial/IR, Ethernet and cellular modem transports.
+* `bt_pan` now reacts to `EVENT_BT_CONNECTED` instead of directly calling `wifi_manager`.
+
+## Reliability and security
+
+* DNS replies are accepted only when their source IP and port match the configured upstream DNS server.
+* Proxy relay no longer relies on HTTP/1.1 chunked response framing for legacy clients.
+* Proxy responses use HTTP/1.0-compatible framing with `Content-Length` or connection-close semantics.
+* Fixed `EVENT_TYPE_COUNT`, which could silently drop events added beyond the previous hardcoded count.
+
+## Wi-Fi
+
+* Wi-Fi manager now uses a single-owner queue-based state machine.
+* Connect, scan, retry and recovery operations are handled through the same state machine.
+* Improved connection recovery and failover behavior.
+
+## Code organization
+
+* NVS access is centralized behind the storage abstraction.
+* `http_server.c` was split into:
+  * `http_routes.c`
+  * `proxy_relay.c`
+* The remaining `http_server.c` handles server startup and URI registration.
+* `pan_wifi_bridge.c` became `app_bootstrap.c`.
+
+## Memory and build optimization
+
+* `-Os` is explicitly enabled.
+* Measured IRAM usage decreased from approximately **79.7% to 74.31%**.
+* Firmware image size decreased by approximately **65 KB**.
+* Added HTTP worker stack high-water-mark monitoring.
+
+## Hardware testing
+
+v0.0.15 was tested on a Sony Ericsson J108 with:
+
+* Bluetooth PAN connection
+* Bluetooth PAN reconnection
+* Wi-Fi failover
+* NAT following independent Bluetooth/Wi-Fi link state changes
+* HTTP proxy relay traffic to a real external website
+* HTML, CSS and image loading through the proxy
+
+[Release v0.0.15](https://github.com/sigildeveloper/satura-bridge/releases/tag/v0.0.15) includes the prebuilt `satura-bridge-v0.0.15.bin` firmware.
+
+---
+
+# Hardware
+
+| Component | Recommended | Minimum |
+| --------- | ----------- | ------- |
+| Board | M5Stack Core2 | ESP32-WROOM-32 |
+| Power | Built-in battery | Any USB 5V supply |
+
+The current development hardware uses ESP32-D0WDQ6-V3.
 
 Satura Bridge requires an ESP32 variant with Bluetooth Classic support.
 
-The current development hardware uses an ESP32-D0WDQ6-V3.
-
-> **Important:** An ESP32 board with an external antenna can provide better range and connection stability than a board with a small onboard antenna. Bluetooth and Wi-Fi operate at the same time and use the ESP32 RF resources. Antenna position and RF design can therefore affect performance.
-
-A custom hardware revision may be developed in the future.
+Bluetooth and Wi-Fi operate simultaneously and share ESP32 RF resources, so antenna design and placement can affect stability and performance.
 
 ---
 
-## Quick Start
+# Quick Start
 
-### 1. Flash the ESP32
+## Flash
 
-See [FLASH.md](FLASH.md) for flashing instructions.
+See [FLASH.md](FLASH.md).
 
-A browser-based flashing option is also available. It does not require additional software.
+The latest firmware is:
 
-### 2. Connect your phone
+```text
+firmware/satura-bridge-v0.0.15.bin
+```
 
-1. Enable Bluetooth on the phone.
-2. Find **Satura Bridge** in the Bluetooth device list.
-3. Pair the phone with Satura Bridge. If the phone requests a PIN, enter `0000`.
-4. Open the web browser on the phone.
-5. Open any `http://` page, or open `http://192.168.7.1` directly.
+A browser-based flashing option is also available through ESP Web Tools.
 
-### 3. Configure Wi-Fi
+Alternatively:
 
-Enter the Wi-Fi network name and password in the setup page.
+```bash
+esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.15.bin
+```
 
-Satura Bridge stores the settings in flash memory. At the next boot, Satura Bridge automatically tries to connect to the saved Wi-Fi network.
+## Connect a phone
+
+1. Enable Bluetooth.
+2. Find **Satura Bridge**.
+3. Pair with the device.
+4. If a PIN is requested, use `0000`.
+5. Open the phone browser.
+6. Open `http://192.168.7.1` or any HTTP URL.
+7. Configure Wi-Fi.
+
+Saved Wi-Fi settings survive reboot and the device automatically attempts to reconnect.
 
 ---
 
-## Web Interface
+# Web Interface
 
 The web interface is available at:
 
 **http://192.168.7.1**
 
-You can access the web interface while a phone is connected to Satura Bridge through Bluetooth.
-
-| Page        | Description                                      |
-| ----------- | ------------------------------------------------ |
-| `/`         | Shows status, RSSI, uptime, and heap information |
-| `/setup`    | Configures Wi-Fi manually                        |
-| `/networks` | Scans, adds, and removes saved Wi-Fi networks    |
-| `/proxy`    | Configures the HTTP proxy                        |
-| `/reset`    | Removes all saved Wi-Fi networks                 |
-| `/reboot`   | Restarts the device                              |
+| Page | Description |
+| ---- | ----------- |
+| `/` | Status, RSSI, uptime and heap information |
+| `/setup` | Manual Wi-Fi configuration |
+| `/networks` | Scan and manage saved Wi-Fi networks |
+| `/proxy` | Configure HTTP proxy gateway |
+| `/reset` | Remove all saved Wi-Fi networks |
+| `/reboot` | Restart the device |
 
 ---
 
-## Performance
+# Performance
 
-| Parameter       | Value             |
-| --------------- | ----------------- |
-| Download        | ~0.15–0.20 Mbit/s |
-| Upload          | ~0.20–0.27 Mbit/s |
-| Ping            | 150–200 ms        |
-| Maximum clients | 1                 |
-| Power draw      | ~200 mA from USB  |
+Typical measured values:
 
-These values were measured under normal conditions.
+| Parameter | Value |
+| --------- | ----- |
+| Download | ~0.15–0.20 Mbit/s |
+| Upload | ~0.20–0.27 Mbit/s |
+| Ping | 150–200 ms |
+| Maximum Bluetooth PAN clients | 1 |
+| Power draw | ~200 mA from USB |
 
-For best results, put Satura Bridge where the phone and the Wi-Fi router have a good signal.
+Actual performance depends on RF conditions and the Bluetooth PAN implementation.
 
-Performance is limited by the simultaneous use of Bluetooth Classic PAN and Wi-Fi on one ESP32. The Bluetooth PAN connection also limits performance.
+The available performance is normally sufficient for:
 
-The available performance is normally sufficient for retro browsers, lightweight web pages, messaging, and similar tasks.
+* retro browsers
+* lightweight web pages
+* messaging
+* J2ME applications
+* WAP-related software
 
 ---
 
-## Compatibility
+# Compatibility
 
-Satura Bridge is designed mainly for legacy mobile phones and other devices that support Bluetooth Classic networking.
+| Device / Platform | Result |
+| ----------------- | ------ |
+| Sony Ericsson J108 | Tested |
+| Older Android devices | Working |
+| NetFront 3.4 | Working |
+| J2ME / Opera Mini | Working |
+| Built-in email client | Working |
 
-### Tested
+Windows 10 Internet connectivity is currently **not supported**.
 
-| Device / Platform              | Result    |
-| ------------------------------ | --------- |
-| Sony Ericsson J108             | Tested    |
-| Older Android devices          | ✅ Working |
-| NetFront 3.4                   | ✅ Working |
-| J2ME applications (Opera Mini) | ✅ Working |
-| Built-in email client          | ✅ Working |
-
-Compatibility can be different for different devices. It depends on the Bluetooth PAN implementation and the operating system.
-
-If you test Satura Bridge on a device that is not in this list, please share the result in the [community chat](https://t.me/nnmidletschat).
-
-Useful information to include:
+For compatibility reports, include:
 
 * Device model
-* Operating system and version
-* Bluetooth profile support, if known
-* Whether pairing was successful
-* Whether a PAN connection was established
+* Operating system/version
+* Bluetooth profile support
+* Pairing result
+* PAN connection result
 * Whether web browsing worked
+
+Community:
+
+https://t.me/nnmidletschat
 
 ---
 
-## Roadmap
+# Roadmap
 
 * [x] Bluetooth Classic PAN
 * [x] Wi-Fi Internet connectivity
 * [x] NAT / routing
-* [x] Web-based configuration
-* [x] Automatic Wi-Fi connection
+* [x] Web configuration
+* [x] Multiple saved Wi-Fi networks
+* [x] Wi-Fi scanning
 * [x] Connection recovery
-* [x] Watchdog and recovery mechanisms
-* [x] Modular codebase refactor
-* [x] Multiple saved Wi-Fi networks with scan-and-connect UI
-* [x] HTTP proxy gateway support
-* [x] Proxy: forward POST request bodies
-* [x] Unified Wi-Fi connection state machine (queue-based, single owner)
-* [x] Proxy: resolve gateway hostnames, not only IP addresses
+* [x] Watchdog
+* [x] Event bus
+* [x] Storage abstraction
+* [x] HTTP proxy gateway
+* [x] Proxy POST body forwarding
+* [x] Proxy hostname resolution
+* [x] Transport-agnostic link abstraction
+* [ ] Bluetooth PPP downlink
+* [ ] Serial / IR downlink
+* [ ] Ethernet uplink
+* [ ] Cellular modem uplink
 * [ ] Test more Nokia Symbian devices
 * [ ] Test more Sony Ericsson devices
 * [ ] Improve compatibility with older phones
 * [ ] Improve Bluetooth / Wi-Fi coexistence
-* [ ] Develop a compact custom PCB with two ESP32 modules onboard
-* [ ] Explore Ethernet connectivity
+* [ ] Compact custom PCB
 
 ---
 
-## Building from Source
+# Building from Source
 
 Requires [ESP-IDF v5.4.x](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
 
@@ -212,47 +363,56 @@ idf.py build
 idf.py flash monitor
 ```
 
-Components are downloaded automatically through `idf_component.yml`.
+For a clean rebuild after changing SDK configuration:
+
+```bash
+idf.py fullclean
+idf.py build
+```
 
 ---
 
-## Project Structure
+# Project Structure
 
 ```text
 satura-bridge/
 ├── main/
-│   ├── app_bootstrap.c          # Core coordination (NAT trigger, watchdog, entry glue)
-│   ├── main.c                   # Entry point
-│   ├── app_state.c/.h           # Bridge state machine
-│   ├── wifi_manager.c/.h        # Wi-Fi connection, retry, recovery
-│   ├── proxy_gateway.c/.h       # Proxy
-│   ├── bt_pan.c/.h              # Bluetooth PAN / BNEP handling
-│   ├── nat_bridge.c/.h          # NAT between BT and Wi-Fi interfaces
-│   ├── dns_server.c/.h          # DNS server with caching and captive replies
-│   ├── http_server.c/.h         # HTTP server startup, URI table
-│   ├── http_routes.c/.h         # UI/config page handlers (setup, status, captive portal)
-│   ├── proxy_relay.c/.h         # Raw-socket relay for /* proxy-gateway traffic
-│   ├── nvs_storage.c/.h         # Wi-Fi credential storage
-│   ├── http_utils.c/.h          # Shared HTTP helpers
-│   ├── uptime.c/.h              # Uptime tracking
-│   ├── config.h                 # Shared constants
-│   └── btstack_config.h         # BTstack configuration
-│   └── watchdog.c/.h            # Single watchdog entry-point
-├── components/                  # BTstack and dependencies
+│   ├── main.c
+│   ├── app_bootstrap.c/.h     # Application startup/core coordination
+│   ├── app_state.c/.h         # Runtime bridge state
+│   ├── bt_pan.c/.h            # Bluetooth PAN / BNEP transport
+│   ├── wifi_manager.c/.h      # Wi-Fi state machine/recovery
+│   ├── link_iface.c/.h        # Generic network interface
+│   ├── link_registry.c/.h     # Active downlink/uplink registry
+│   ├── nat_bridge.c/.h        # Transport-independent NAT
+│   ├── event_bus.c/.h         # Generic event bus
+│   ├── storage.c/.h           # Persistent storage abstraction
+│   ├── proxy_gateway.c/.h     # Proxy configuration/resolution
+│   ├── proxy_relay.c/.h       # Raw-socket proxy relay
+│   ├── dns_server.c/.h        # DNS forwarding/cache/captive replies
+│   ├── http_server.c/.h       # HTTP server startup/URI registration
+│   ├── http_routes.c/.h       # Web UI/configuration handlers
+│   ├── http_utils.c/.h        # HTTP helpers
+│   ├── watchdog.c/.h          # Watchdog/recovery
+│   ├── uptime.c/.h            # Uptime tracking
+│   ├── config.h               # Shared constants
+│   └── btstack_config.h       # BTstack configuration
+├── components/                # BTstack and dependencies
 ├── firmware/
-│   └── satura-bridge-v0.0.14.bin # Prebuilt firmware
-├── sdkconfig.defaults           # Build configuration
-├── FLASH.md                     # Flashing instructions
+│   └── satura-bridge-v0.0.15.bin
+├── sdkconfig.defaults
+├── FLASH.md
+├── CHANGELOG.md
 └── README.md
 ```
 
 ---
 
-## Related Projects
+# Related Projects
 
-### [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
+## [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
 
-Vetera Bridge provides Internet connectivity through Bluetooth PPP for older S60 v1 devices, including devices such as the Nokia N-Gage that do not support Bluetooth PAN.
+Vetera Bridge provides Bluetooth PPP Internet connectivity for older S60 v1 devices, including Nokia N-Gage, which do not support Bluetooth PAN.
 
 It uses GnuBox on the phone.
 
@@ -260,23 +420,27 @@ Satura Bridge and Vetera Bridge target different generations of legacy mobile ph
 
 ---
 
-## License
+# License
 
 Satura Bridge is released under the MIT License.
 
 You can use and modify the project as you want. Keep the original attribution.
 
-BTstack in `components/btstack/` is distributed under its own license. See [`components/btstack/LICENSE`](components/btstack/LICENSE).
+BTstack in `components/btstack/` is distributed under its own license.
+
+See:
+
+[`components/btstack/LICENSE`](components/btstack/LICENSE)
 
 ---
 
-## Author & Community
+# Author & Community
 
 **Author:** [@sigdev](https://github.com/sigildeveloper)
 
 **Community:** [Telegram — @nnmidletschat](https://t.me/nnmidletschat)
 
-**Retro phones • Symbian • J2ME • Bluetooth networking**
+**Vintage phones • Symbian • J2ME • Retro networking**
 
 ---
 
@@ -284,203 +448,315 @@ BTstack in `components/btstack/` is distributed under its own license. See [`com
 
 **«Возвращаем старые телефоны в интернет.»**
 
-Satura Bridge — Bluetooth PAN → Wi-Fi шлюз для старых мобильных телефонов и устройств на Symbian.
+Satura Bridge — открытый Bluetooth Classic PAN → Internet шлюз на ESP32 для старых мобильных телефонов и устройств Symbian.
+
+В текущей версии Bluetooth PAN используется как downlink, а Wi-Fi — как uplink.
 
 ---
 
 ## Что такое Satura Bridge?
 
-Satura Bridge — небольшой шлюз на базе ESP32. Он позволяет старым мобильным телефонам получать доступ в интернет через Bluetooth. Для подключения к интернету Satura Bridge использует Wi-Fi сеть.
-
-Многие старые телефоны, включая Nokia, Sony Ericsson и другие устройства, имеют Bluetooth, но не имеют Wi-Fi. Во многих странах сети 2G и 3G постепенно отключаются. Поэтому такие устройства могут потерять доступ к мобильному интернету.
-
-Satura Bridge предоставляет другой способ подключения. Телефон подключается к Satura Bridge через Bluetooth PAN. Satura Bridge подключается к роутеру через Wi-Fi.
-
-Для телефона Satura Bridge выглядит как обычное Bluetooth PAN-соединение. Драйверы и специальное программное обеспечение на телефоне не требуются, если телефон поддерживает необходимый Bluetooth-профиль.
+Satura Bridge позволяет старым телефонам с Bluetooth получать доступ в интернет через Wi-Fi.
 
 ```text
 ┌──────────────────┐
 │  Старый телефон  │
 │  Nokia / Symbian │
 └────────┬─────────┘
-         │
          │ Bluetooth Classic / PAN
          ▼
 ┌──────────────────┐
 │  Satura Bridge   │
 │      ESP32       │
 └────────┬─────────┘
-         │
          │ Wi-Fi
          ▼
 ┌──────────────────┐
 │      Роутер      │
 └────────┬─────────┘
-         │
          ▼
        Интернет
 ```
 
-Satura Bridge в первую очередь предназначен для устройств с поддержкой Bluetooth PAN / NAP. Совместимость может различаться в зависимости от телефона и операционной системы. Тестирование совместимости продолжается.
+Телефону не требуется специальное программное обеспечение, если он поддерживает необходимый Bluetooth PAN-профиль.
 
-> **Важно:** Satura Bridge в текущей версии не предоставляет интернет-соединение устройствам под управлением Windows 10. Старые Android-устройства были успешно протестированы. Некоторые КПК и другие устройства с Bluetooth Classic также могут работать.
+> **Важно:** Windows 10 в текущей версии не поддерживается. Старые Android-устройства, Sony Ericsson J108, NetFront 3.4 и J2ME-приложения были протестированы.
+
+---
+
+## Архитектура v0.0.15
+
+В v0.0.15 сетевое ядро стало независимым от конкретного транспорта.
+
+```text
+                  ┌─────────────────┐
+                  │    HTTP / DNS   │
+                  └────────┬────────┘
+                           │
+                  ┌────────▼────────┐
+                  │   nat_bridge    │
+                  └────────┬────────┘
+                           │
+                    link_registry
+                       │       │
+                  DOWNLINK   UPLINK
+                       │       │
+                    BT PAN    Wi-Fi
+```
+
+### `link_iface_t`
+
+Универсальный интерфейс сетевого соединения.
+
+### `link_registry`
+
+Хранит активные интерфейсы для ролей:
+
+* `DOWNLINK`
+* `UPLINK`
+
+### `nat_bridge`
+
+Работает через абстрактный интерфейс и больше не зависит непосредственно от Bluetooth PAN или Wi-Fi.
+
+Это позволяет в будущем добавлять другие транспорты без переписывания NAT, HTTP и DNS.
+
+Планируемые варианты:
+
+* Bluetooth PPP
+* Serial / IR
+* Ethernet
+* 4G / 5G modem
+* другие сетевые интерфейсы
+
+Пока из них реально реализованы только:
+
+* Bluetooth Classic PAN
+* Wi-Fi
 
 ---
 
 ## Возможности
 
-* Bluetooth Classic
-* Bluetooth PAN / NAP
-* Wi-Fi для подключения к интернету
-* NAT / маршрутизация между Bluetooth и Wi-Fi
-* Веб-интерфейс настройки
-* Captive portal для первоначальной настройки
-* Автоматическое подключение к сохранённой Wi-Fi сети после включения
-* Поддержка до 6 сохранённых Wi-Fi сетей с подключением к сети с самым сильным видимым сигналом
-* Поддержка HTTP прокси, например прокси для сжатия трафика WAP
-* Автоматическое восстановление соединения
-* Watchdog, который может перезапускать остановленные компоненты без полной перезагрузки устройства
-* Прошивка одним файлом
-* Поддержка старых мобильных телефонов и устройств Symbian
+* Bluetooth Classic PAN / NAP
+* Wi-Fi uplink
+* Transport-agnostic network interface
+* NAT / маршрутизация
+* Event bus
+* Generic link-state events
+* Веб-интерфейс
+* Captive portal
+* До 6 сохранённых Wi-Fi сетей
+* Сканирование Wi-Fi
+* Автоматический выбор сети
+* Recovery / failover
+* Watchdog
+* HTTP proxy gateway
+* POST body forwarding
+* Разрешение hostname proxy gateway
+* Кеширование IPv4 proxy gateway
+* HTTP/1.0 framing для старых клиентов
+* Проверка источника DNS-ответов
+* HTTP worker stack monitoring
+* `-Os` optimization
 
 ---
 
-## Железо
+## HTTP Proxy
 
-| Компонент | Рекомендуемый вариант | Минимальный вариант                                         |
-| --------- | --------------------- | ----------------------------------------------------------- |
-| Плата     | M5Stack Core2         | ESP32-WROOM-32                                              |
-| Питание   | Встроенная батарея    | Любой источник USB 5V                                       |
-| Корпус    | Уже установлен        | Корпус не обязателен; можно использовать 3D-печатный корпус |
+Прокси настраивается через:
 
-Для работы Satura Bridge требуется ESP32 с поддержкой Bluetooth Classic.
+```text
+http://192.168.7.1/proxy
+```
 
-Текущее тестовое устройство использует ESP32-D0WDQ6-V3.
+Gateway можно указать:
 
-> **Важно:** ESP32 с внешней антенной может обеспечивать большую дальность и более стабильное соединение по сравнению с платой с небольшой встроенной антенной. Bluetooth и Wi-Fi работают одновременно и используют радиоресурсы ESP32. Поэтому положение антенны и конструкция RF-части могут влиять на работу устройства.
+```text
+192.168.1.100
+```
 
-В будущем может быть разработана собственная версия платы.
+или:
+
+```text
+proxy.example.com
+```
+
+Hostname разрешается и полученный IPv4-адрес кешируется.
+
+Proxy relay поддерживает POST body.
+
+Для совместимости со старыми браузерами и WAP-программами используется HTTP/1.0-style framing с `Content-Length` или закрытием соединения вместо HTTP/1.1 chunked encoding.
+
+---
+
+## v0.0.15 — что изменилось
+
+v0.0.15 — в первую очередь релиз **архитектурного рефакторинга, оптимизации и повышения надёжности**.
+
+### Transport abstraction
+
+* Добавлен `link_iface_t`.
+* Добавлен `link_registry`.
+* `nat_bridge` отвязан от BT PAN и Wi-Fi.
+* Добавлены generic events:
+  * `EVENT_DOWNLINK_UP`
+  * `EVENT_DOWNLINK_DOWN`
+  * `EVENT_UPLINK_UP`
+  * `EVENT_UPLINK_DOWN`
+* Создана основа для Bluetooth PPP, Serial/IR, Ethernet и cellular modem.
+* `bt_pan` теперь реагирует на `EVENT_BT_CONNECTED`, а не вызывает `wifi_manager` напрямую.
+
+### Wi-Fi
+
+* Wi-Fi manager переведён на queue-based state machine.
+* Connect, scan, retry и recovery используют единого владельца очереди.
+* Улучшено восстановление соединения.
+
+### DNS и proxy
+
+* DNS теперь принимает ответы только от настроенного upstream DNS-сервера.
+* Проверяются IP и порт источника DNS-ответа.
+* Proxy relay больше не использует HTTP/1.1 chunked framing для legacy clients.
+* Используется HTTP/1.0-compatible framing.
+* Добавлена поддержка POST request bodies.
+* Proxy gateway может задаваться hostname.
+* IPv4-результат hostname кешируется.
+
+### Структура проекта
+
+* NVS доступ централизован через storage abstraction.
+* `http_server.c` разделён на:
+  * `http_routes.c`
+  * `proxy_relay.c`
+* `pan_wifi_bridge.c` переименован в `app_bootstrap.c`.
+
+### Оптимизация
+
+* Явно зафиксирован `-Os`.
+* IRAM usage уменьшен примерно с **79.7% до 74.31%**.
+* Размер firmware уменьшен примерно на **65 KB**.
+* Добавлен HTTP worker stack high-water-mark logging.
+
+### Исправления
+
+* Исправлен `EVENT_TYPE_COUNT`, из-за которого новые события могли теряться при превышении старого hardcoded count.
+
+### Тестирование
+
+v0.0.15 протестирован на Sony Ericsson J108:
+
+* BT PAN connect
+* BT PAN reconnect
+* Wi-Fi failover
+* независимое состояние BT/Wi-Fi для NAT
+* proxy relay
+* внешний сайт
+* HTML
+* CSS
+* изображения
+
+Релиз:
+
+**v0.0.15**
+
+Firmware:
+
+```text
+firmware/satura-bridge-v0.0.15.bin
+```
 
 ---
 
 ## Быстрый старт
 
-### 1. Прошить ESP32
+### 1. Прошивка
 
-См. [`FLASH.md`](FLASH.md) для получения инструкций по прошивке.
+См. [`FLASH.md`](FLASH.md).
 
-Также доступна прошивка через браузер. Дополнительное программное обеспечение для этого не требуется.
+Или прошейте:
 
-### 2. Подключить телефон
+```text
+firmware/satura-bridge-v0.0.15.bin
+```
 
-1. Включите Bluetooth на телефоне.
-2. Найдите **Satura Bridge** в списке Bluetooth-устройств.
-3. Выполните сопряжение с Satura Bridge. Если телефон запрашивает PIN, введите `0000`.
-4. Откройте браузер на телефоне.
-5. Откройте любую страницу `http://` или непосредственно `http://192.168.7.1`.
+### 2. Bluetooth
 
-### 3. Настроить Wi-Fi
+1. Включите Bluetooth.
+2. Найдите **Satura Bridge**.
+3. Выполните pairing.
+4. PIN: `0000`, если запрашивается.
 
-Введите имя и пароль Wi-Fi сети на странице настройки.
+### 3. Настройка Wi-Fi
 
-Satura Bridge сохраняет настройки во flash-памяти. При следующем включении Satura Bridge автоматически пытается подключиться к сохранённой Wi-Fi сети.
+Откройте:
+
+```text
+http://192.168.7.1
+```
+
+и настройте Wi-Fi.
 
 ---
 
 ## Веб-интерфейс
 
-Веб-интерфейс доступен по адресу:
-
-**http://192.168.7.1**
-
-Веб-интерфейс можно открыть, когда телефон подключён к Satura Bridge через Bluetooth.
-
-| Страница    | Описание                                                  |
-| ----------- | --------------------------------------------------------- |
-| `/`         | Показывает статус, RSSI, время работы и информацию о heap |
-| `/setup`    | Настраивает Wi-Fi вручную                                 |
-| `/networks` | Сканирует, добавляет и удаляет сохранённые Wi-Fi сети     |
-| `/proxy`    | Настраивает HTTP прокси                                   |
-| `/reset`    | Удаляет все сохранённые Wi-Fi сети                        |
-| `/reboot`   | Перезапускает устройство                                  |
-
----
-
-## Производительность
-
-| Параметр                         | Значение          |
-| -------------------------------- | ----------------- |
-| Скорость скачивания              | ~0.15–0.20 Мбит/с |
-| Скорость загрузки                | ~0.20–0.27 Мбит/с |
-| Пинг                             | 150–200 мс        |
-| Максимальное количество клиентов | 1                 |
-| Потребление                      | ~200 мА от USB    |
-
-Значения получены в нормальных условиях.
-
-Для лучшего результата установите Satura Bridge в месте с хорошим сигналом телефона и Wi-Fi роутера.
-
-Производительность ограничена одновременной работой Bluetooth Classic PAN и Wi-Fi на одном ESP32. Возможности Bluetooth PAN-соединения также ограничивают производительность.
-
-Для ретро-браузеров, лёгких веб-страниц, обмена сообщениями и подобных задач доступной производительности обычно достаточно.
+| Страница | Назначение |
+| -------- | ---------- |
+| `/` | Статус, RSSI, uptime, heap |
+| `/setup` | Настройка Wi-Fi |
+| `/networks` | Сканирование и управление сетями |
+| `/proxy` | HTTP proxy |
+| `/reset` | Удаление Wi-Fi сетей |
+| `/reboot` | Перезагрузка |
 
 ---
 
 ## Совместимость
 
-Satura Bridge в первую очередь предназначен для старых мобильных телефонов и других устройств с поддержкой Bluetooth Classic networking.
+| Устройство / ПО | Результат |
+| ---------------- | --------- |
+| Sony Ericsson J108 | Протестировано |
+| Старые Android | Работает |
+| NetFront 3.4 | Работает |
+| J2ME / Opera Mini | Работает |
+| Встроенный email | Работает |
 
-### Протестировано
-
-| Устройство / платформа    | Результат      |
-| ------------------------- | -------------- |
-| Sony Ericsson J108        | Протестировано |
-| Старые Android-устройства | ✅ Работает     |
-| NetFront 3.4              | ✅ Работает     |
-| J2ME-приложения           | ✅ Работает     |
-
-Совместимость может различаться в зависимости от устройства. Она зависит от реализации Bluetooth PAN и используемой операционной системы.
-
-Если вы протестировали Satura Bridge на устройстве, которого нет в списке, сообщите результат в [сообщество Telegram](https://t.me/nnmidletschat).
-
-Желательно указать:
-
-* модель устройства;
-* операционную систему и версию;
-* поддержку Bluetooth-профилей, если она известна;
-* удалось ли выполнить сопряжение;
-* удалось ли установить PAN-соединение;
-* работает ли веб-браузер.
+Windows 10 пока не поддерживается.
 
 ---
 
-## Планы
+## Roadmap
 
 * [x] Bluetooth Classic PAN
-* [x] Wi-Fi подключение к интернету
-* [x] NAT / маршрутизация
-* [x] Веб-интерфейс настройки
-* [x] Автоматическое подключение к Wi-Fi
-* [x] Восстановление соединения
-* [x] Watchdog и механизмы восстановления
-* [x] Модульный рефакторинг кодовой базы
-* [x] Несколько сохранённых Wi-Fi сетей с UI сканирования и подключения
-* [x] Поддержка HTTP прокси
-* [x] Прокси: пересылка тела POST-запросов
-* [x] Единый конечный автомат для Wi-Fi подключений (с очередью команд и одним владельцем)
-* [x] Прокси: разрешение имён шлюза, а не только IP-адресов
-* [ ] Протестировать больше устройств Nokia на Symbian
-* [ ] Протестировать больше устройств Sony Ericsson
-* [ ] Улучшить совместимость со старыми телефонами
-* [ ] Улучшить совместную работу Bluetooth и Wi-Fi
-* [ ] Разработать компактную собственную PCB с двумя модулями ESP32
-* [ ] Исследовать поддержку Ethernet
+* [x] Wi-Fi Internet
+* [x] NAT / routing
+* [x] Web configuration
+* [x] Multiple Wi-Fi networks
+* [x] Wi-Fi scanning
+* [x] Connection recovery
+* [x] Watchdog
+* [x] Event bus
+* [x] Storage abstraction
+* [x] HTTP proxy
+* [x] POST body forwarding
+* [x] Proxy hostname resolution
+* [x] Transport-agnostic link abstraction
+* [ ] Bluetooth PPP
+* [ ] Serial / IR
+* [ ] Ethernet uplink
+* [ ] Cellular modem uplink
+* [ ] Больше тестов Nokia Symbian
+* [ ] Больше тестов Sony Ericsson
+* [ ] Улучшение совместимости
+* [ ] Улучшение Bluetooth / Wi-Fi coexistence
+* [ ] Компактная собственная PCB
 
 ---
 
-## Сборка из исходников
+## Сборка
 
-Требуется [ESP-IDF v5.4.x](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
+Требуется ESP-IDF v5.4.x.
 
 ```bash
 git clone --recursive https://github.com/sigildeveloper/satura-bridge
@@ -489,61 +765,37 @@ idf.py build
 idf.py flash monitor
 ```
 
-Компоненты автоматически загружаются через `idf_component.yml`.
+Для чистой пересборки:
 
----
-
-## Структура проекта
-
-```text
-satura-bridge/
-├── main/
-│   ├── app_bootstrap.c          # Основная координация (запуск NAT, watchdog, точка входа)
-│   ├── main.c                   # Точка входа
-│   ├── app_state.c/.h           # Конечный автомат состояния моста
-│   ├── wifi_manager.c/.h        # Подключение, повторные попытки и восстановление Wi-Fi
-│   ├── proxy_gateway.c/.h       # Прокси
-│   ├── bt_pan.c/.h              # Обработка Bluetooth PAN / BNEP
-│   ├── nat_bridge.c/.h          # NAT между интерфейсами BT и Wi-Fi
-│   ├── dns_server.c/.h          # DNS-сервер с кэшем и captive-ответами
-│   ├── http_server.c/.h         # Запуск HTTP-сервера, таблица маршрутов
-│   ├── http_routes.c/.h         # Обработчики UI/страниц настройки (setup, статус, captive portal)
-│   ├── proxy_relay.c/.h         # Релей на сырых сокетах для трафика через /*
-│   ├── nvs_storage.c/.h         # Сохранение данных Wi-Fi
-│   ├── http_utils.c/.h          # Общие HTTP-функции
-│   ├── uptime.c/.h              # Учёт времени работы
-│   ├── config.h                 # Общие константы
-│   └── btstack_config.h         # Конфигурация BTstack
-│   └── watchdog.c/.h            # Единая точка входа смотреть-@
-├── components/                  # BTstack и зависимости
-├── firmware/
-│   └── satura-bridge-v0.0.14.bin # Готовая прошивка
-├── sdkconfig.defaults           # Конфигурация сборки
-├── FLASH.md                     # Инструкция по прошивке
-└── README.md
+```bash
+idf.py fullclean
+idf.py build
 ```
 
 ---
 
-## Похожие проекты
+## Железо
 
-### [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
+| Компонент | Рекомендуемый | Минимальный |
+| --------- | ------------- | ----------- |
+| Плата | M5Stack Core2 | ESP32-WROOM-32 |
+| Питание | Встроенная батарея | USB 5V |
 
-Vetera Bridge предоставляет доступ к интернету через Bluetooth PPP для старых устройств S60 v1, включая Nokia N-Gage и другие устройства без поддержки Bluetooth PAN.
+Текущее тестовое устройство:
 
-На телефоне используется GnuBox.
-
-Satura Bridge и Vetera Bridge предназначены для разных поколений старых мобильных телефонов и используют разные сетевые технологии.
+```text
+ESP32-D0WDQ6-V3
+```
 
 ---
 
 ## Лицензия
 
-Satura Bridge распространяется под лицензией MIT.
+MIT License.
 
-Вы можете использовать и изменять проект. Сохраняйте исходное указание авторства.
+BTstack в `components/btstack/` распространяется по собственной лицензии:
 
-BTstack в `components/btstack/` распространяется под собственной лицензией. См. [`components/btstack/LICENSE`](components/btstack/LICENSE).
+[`components/btstack/LICENSE`](components/btstack/LICENSE)
 
 ---
 
@@ -551,6 +803,6 @@ BTstack в `components/btstack/` распространяется под соб�
 
 **Автор:** [@sigdev](https://github.com/sigildeveloper)
 
-**Сообщество:** [Telegram — @nnmidletschat](https://t.me/nnmidletschat)
+**Telegram:** [@nnmidletschat](https://t.me/nnmidletschat)
 
-**Ретро-телефоны • Symbian • J2ME • Bluetooth networking**
+**Vintage phones • Symbian • J2ME • Retro networking**
