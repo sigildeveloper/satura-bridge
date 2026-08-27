@@ -7,6 +7,7 @@ idf_component_register(
         "http_utils.c"
         "http_routes.c"
         "proxy_relay.c"
+        "clipboard.c"
         "app_state.c"
         "wifi_manager.c"
         "bt_pan.c"

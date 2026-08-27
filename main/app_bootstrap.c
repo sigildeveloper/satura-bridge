@@ -34,6 +34,7 @@
 #include "esp_timer.h"
 #include "nat_bridge.h"
 #include "watchdog.h"
+#include "clipboard.h"
 
 static const char *TAG = "satura_bridge";
 
@@ -109,6 +110,7 @@ int btstack_main(int argc, const char *argv[]) {
 
     watchdog_start();
 
+    clipboard_init();
     http_server_start();
     bt_pan_init();
     bt_pan_start();

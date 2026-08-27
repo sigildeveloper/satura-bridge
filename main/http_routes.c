@@ -17,7 +17,7 @@
 #include "nvs_storage.h"
 #include "proxy_gateway.h"
 
-#define PROJECT_VERSION "v0.0.15"
+#define PROJECT_VERSION "v0.0.14"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
 #define PAGE_FOOTER \
     "<hr><p>" \
@@ -96,6 +96,7 @@ static const char PAGE_STATUS_FMT[] =
     "<a href='/reset'>Forget WiFi</a><br>"
     "<a href='/networks'>Manage Networks</a><br>"
     "<a href='/proxy'>Proxy Gateway</a><br>"
+    "<a href='/clip'>Clipboard</a><br>"
     "<a href='/reboot' style='color:#e74c3c;'>Reboot</a>"
     "<br><br><small>" PAGE_FOOTER "</small>"
     "</body></html>";
@@ -159,7 +160,7 @@ static const char PAGE_PROXY_FMT[] =
     "<p>Gateway/domain host:<br>"
     "<input type='text' name='host' size='24' maxlength='63' value='%s'></p>"
     "<p>Gateway/domain port:<br>"
-    "<input type='text' name='port' size='10' maxlength='5' value='%d'></p>"
+    "<input type='number' inputmode='numeric' pattern='[0-9]*' name='port' size='10' maxlength='5' value='%d'></p>"
     "<p><input type='submit' value='Save' style='font-size:110%%;'></p>"
     "</form><hr>"
     "<a href='/'>Back</a>"
@@ -319,6 +320,14 @@ esp_err_t handler_proxy_get(httpd_req_t *req) {
     return r;
 }
 
+static bool is_digits_only(const char *s) {
+    if (!s[0]) return true; /* empty is fine — falls back to the default port */
+    for (const char *p = s; *p; p++) {
+        if (*p < '0' || *p > '9') return false;
+    }
+    return true;
+}
+
 esp_err_t handler_proxy_post(httpd_req_t *req) {
     char buf[256] = {0};
     int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -329,6 +338,17 @@ esp_err_t handler_proxy_post(httpd_req_t *req) {
     bool has_en = (httpd_query_key_value(buf, "en", en_s, sizeof(en_s)) == ESP_OK);
     httpd_query_key_value(buf, "host", host_s, sizeof(host_s));
     httpd_query_key_value(buf, "port", port_s, sizeof(port_s));
+
+    if (!is_digits_only(port_s)) {
+        /* Reject the whole submission rather than silently truncating
+         * "80abc" to 80 (what atoi() alone would do) — a typo in the
+         * port shouldn't apply a value the user never intended, and
+         * shouldn't silently drop a host change bundled in the same
+         * form either. */
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/proxy");
+        return httpd_resp_send(req, NULL, 0);
+    }
 
     proxy_gateway_config_t cfg = {0};
     cfg.enabled = has_en;
