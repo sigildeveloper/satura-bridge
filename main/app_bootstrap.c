@@ -35,6 +35,8 @@
 #include "nat_bridge.h"
 #include "watchdog.h"
 #include "clipboard.h"
+#include "device_name.h"
+#include "battery.h"
 
 static const char *TAG = "satura_bridge";
 
@@ -111,6 +113,8 @@ int btstack_main(int argc, const char *argv[]) {
     watchdog_start();
 
     clipboard_init();
+    device_name_init();
+    battery_init();
     http_server_start();
     bt_pan_init();
     bt_pan_start();

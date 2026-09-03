@@ -28,13 +28,15 @@ void http_server_start(void) {
             { "/networks/connect", HTTP_GET,  handler_networks_connect_get, NULL },
             { "/proxy",            HTTP_GET,  handler_proxy_get,          NULL },
             { "/proxy",            HTTP_POST, handler_proxy_post,         NULL },
+            { "/name",             HTTP_GET,  handler_name_get,           NULL },
+            { "/name",             HTTP_POST, handler_name_post,          NULL },
             { "/clip",             HTTP_GET,  handler_clip_get,           NULL },
             { "/clip/add",         HTTP_POST, handler_clip_add_post,      NULL },
             { "/clip/action",      HTTP_GET,  handler_clip_action_get,    NULL },
             { "/*",                HTTP_GET,  handler_proxy_relay,        NULL },
             { "/*",                HTTP_POST, handler_proxy_relay,        NULL },
         };
-        for (int i = 0; i < 17; i++)
+        for (int i = 0; i < 19; i++)
             httpd_register_uri_handler(http_server, &uris[i]);
         httpd_register_err_handler(http_server,
                                    HTTPD_404_NOT_FOUND, handler_404);

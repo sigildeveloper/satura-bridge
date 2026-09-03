@@ -48,6 +48,12 @@ CONFIG_ESP_WIFI_RX_IRAM_OPT=n
 # clone can't silently regress this.
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 
+# 802.11r Fast Transition support — some mesh/consumer routers require
+# FT to associate at all (not just to enable fast roaming), rejecting
+# non-FT clients outright. Paired with ft_enabled=true in
+# wifi_manager.c's connect config.
+CONFIG_ESP_WIFI_11R_SUPPORT=y
+
 # Не используются проектом
 CONFIG_LWIP_IPV4_NAPT_PORTMAP=n
 CONFIG_LWIP_IPV6=n

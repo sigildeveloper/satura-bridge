@@ -7,6 +7,8 @@ esp_err_t handler_setup_post(httpd_req_t *req);
 esp_err_t handler_reset(httpd_req_t *req);
 esp_err_t handler_proxy_get(httpd_req_t *req);
 esp_err_t handler_proxy_post(httpd_req_t *req);
+esp_err_t handler_name_get(httpd_req_t *req);
+esp_err_t handler_name_post(httpd_req_t *req);
 esp_err_t handler_networks_get(httpd_req_t *req);
 esp_err_t handler_networks_add_post(httpd_req_t *req);
 esp_err_t handler_networks_delete(httpd_req_t *req);

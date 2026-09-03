@@ -103,8 +103,8 @@ static void wifi_soft_reset(void);
  * Public: credentials / multi-network storage
  * ============================================================ */
 
-void wifi_manager_set_credentials(const char *ssid, const char *pass) {
-    nvs_storage_add_network(ssid, pass);
+void wifi_manager_set_credentials(const char *ssid, const char *pass, bool hidden) {
+    nvs_storage_add_network(ssid, pass, hidden);
 }
 
 bool wifi_manager_has_credentials(void) {
@@ -120,8 +120,8 @@ int wifi_manager_get_saved_networks(wifi_network_t *out, int max_count) {
     return nvs_storage_load_networks(out, max_count);
 }
 
-bool wifi_manager_add_network(const char *ssid, const char *pass) {
-    return nvs_storage_add_network(ssid, pass);
+bool wifi_manager_add_network(const char *ssid, const char *pass, bool hidden) {
+    return nvs_storage_add_network(ssid, pass, hidden);
 }
 
 bool wifi_manager_remove_network(int index) {
@@ -313,9 +313,17 @@ static void build_candidate_list(void) {
                 if (scan_results[j].rssi > best_rssi) best_rssi = scan_results[j].rssi;
             }
         }
-        if (visible) {
+        /* A hidden network never appears in scan results — that's
+         * what "hidden" means, it doesn't answer a wildcard probe
+         * with its SSID. Attempt it regardless of scan visibility;
+         * the actual join process sends a *directed* probe naming
+         * this exact SSID, which a hidden AP does answer. Sorted
+         * last among candidates (lowest rssi) since we have no
+         * signal-strength info for it and visible saved networks
+         * are the more likely intent when both are in range. */
+        if (visible || saved[i].hidden) {
             candidate_list[candidate_count] = saved[i];
-            candidate_rssi[candidate_count] = best_rssi;
+            candidate_rssi[candidate_count] = visible ? best_rssi : -127;
             candidate_count++;
         }
     }
@@ -597,9 +605,37 @@ static void wifi_worker_task(void *arg) {
  * queue events. No decision-making happens here.
  * ============================================================ */
 
+static const char *disconnect_reason_str(uint8_t reason) {
+    switch (reason) {
+        case WIFI_REASON_UNSPECIFIED:            return "UNSPECIFIED";
+        case WIFI_REASON_AUTH_EXPIRE:             return "AUTH_EXPIRE";
+        case WIFI_REASON_AUTH_LEAVE:               return "AUTH_LEAVE";
+        case WIFI_REASON_ASSOC_EXPIRE:             return "ASSOC_EXPIRE";
+        case WIFI_REASON_ASSOC_TOOMANY:            return "ASSOC_TOOMANY";
+        case WIFI_REASON_NOT_AUTHED:               return "NOT_AUTHED";
+        case WIFI_REASON_NOT_ASSOCED:              return "NOT_ASSOCED";
+        case WIFI_REASON_ASSOC_LEAVE:               return "ASSOC_LEAVE";
+        case WIFI_REASON_ASSOC_NOT_AUTHED:          return "ASSOC_NOT_AUTHED";
+        case WIFI_REASON_MIC_FAILURE:               return "MIC_FAILURE (wrong password or cipher mismatch)";
+        case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:    return "4WAY_HANDSHAKE_TIMEOUT (usually wrong password)";
+        case WIFI_REASON_GROUP_KEY_UPDATE_TIMEOUT:  return "GROUP_KEY_UPDATE_TIMEOUT";
+        case WIFI_REASON_IE_IN_4WAY_DIFFERS:        return "IE_IN_4WAY_DIFFERS";
+        case WIFI_REASON_HANDSHAKE_TIMEOUT:         return "HANDSHAKE_TIMEOUT";
+        case WIFI_REASON_NO_AP_FOUND:               return "NO_AP_FOUND";
+        case WIFI_REASON_AUTH_FAIL:                 return "AUTH_FAIL";
+        case WIFI_REASON_ASSOC_FAIL:                return "ASSOC_FAIL";
+        case WIFI_REASON_CONNECTION_FAIL:           return "CONNECTION_FAIL";
+        case WIFI_REASON_BEACON_TIMEOUT:            return "BEACON_TIMEOUT (out of range or AP dropped us)";
+        default:                                    return "?";
+    }
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t base,
                                 int32_t id, void *data) {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *e = (wifi_event_sta_disconnected_t *)data;
+        ESP_LOGW(TAG, "[WIFI] disconnected, reason=%d (%s)",
+                 e->reason, disconnect_reason_str(e->reason));
         wifi_post_evt(WEVT_DISCONNECTED);
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;

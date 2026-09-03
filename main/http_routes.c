@@ -16,6 +16,8 @@
 #include "uptime.h"
 #include "nvs_storage.h"
 #include "proxy_gateway.h"
+#include "device_name.h"
+#include "battery.h"
 
 #define PROJECT_VERSION "v0.0.14"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
@@ -67,6 +69,8 @@ static const char PAGE_SETUP[] =
     "<input type='text' name='ssid' size='20' maxlength='32'></p>"
     "<p>Password: (optional)<br>"
     "<input type='password' name='pass' size='20' maxlength='63'></p>"
+    "<p><label><input type='checkbox' name='hidden' value='1'> "
+    "This network is hidden (not broadcasting its name)</label></p>"
     "<p><input type='submit' value='Connect' style='font-size:110%;'></p>"
     "</form><hr>"
     "<a href='/'>Reload</a><br>"
@@ -91,12 +95,14 @@ static const char PAGE_STATUS_FMT[] =
     "<b>Uptime:</b> %" PRIu32 "d %02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 "<br>"
     "<b>Free heap:</b> %d KB<br>"
     "<b>Proxy:</b> %s"
+    "%s"
     "</div><hr>"
     "<a href='/'>Reload</a><br>"
     "<a href='/reset'>Forget WiFi</a><br>"
     "<a href='/networks'>Manage Networks</a><br>"
     "<a href='/proxy'>Proxy Gateway</a><br>"
     "<a href='/clip'>Clipboard</a><br>"
+    "<a href='/name'>Device Name</a><br>"
     "<a href='/reboot' style='color:#e74c3c;'>Reboot</a>"
     "<br><br><small>" PAGE_FOOTER "</small>"
     "</body></html>";
@@ -140,6 +146,25 @@ static const char PAGE_NETWORKS_HEADER[] =
     "<h2>Wi-Fi Networks</h2><hr>";
 
 static const char PAGE_NETWORKS_FOOTER[] =
+    "<a href='/'>Back</a>"
+    "<br><br><small>" PAGE_FOOTER "</small>"
+    "</body></html>";
+
+static const char PAGE_NAME_FMT[] =
+    "<html><head><title>Device Name</title>"
+    "<meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<meta name='format-detection' content='telephone=no'>"
+    "</head>"
+    "<body style='font-family:sans-serif;padding:20px;text-align:center;'>"
+    "<h2>Device Name</h2><hr>"
+    "<p style='text-align:left;'>This is the name your phone sees when "
+    "pairing or scanning for Bluetooth devices. Takes effect on the next "
+    "reboot.</p>"
+    "<form action='/name' method='post'>"
+    "<p><input type='text' name='name' size='24' maxlength='32' value='%s'></p>"
+    "<p><input type='submit' value='Save &amp; Reboot' style='font-size:110%%;'></p>"
+    "</form><hr>"
     "<a href='/'>Back</a>"
     "<br><br><small>" PAGE_FOOTER "</small>"
     "</body></html>";
@@ -260,11 +285,21 @@ esp_err_t handler_root(httpd_req_t *req) {
     if (!page) return ESP_ERR_NO_MEM;
     char ip_buf[16];
     wifi_manager_get_ip(ip_buf, sizeof(ip_buf));
+
+    char battery_line[48] = {0};
+    int batt_pct = battery_get_percent();
+    if (batt_pct >= 0) {
+        snprintf(battery_line, sizeof(battery_line),
+                 "<br><b>Battery:</b> %d%%%s", batt_pct,
+                 battery_is_charging() ? " (charging)" : "");
+    }
+
     snprintf(page, 3072, PAGE_STATUS_FMT,
                  esc, ip_buf, (int)rw, (int)rb,
                  up / 86400, (up % 86400) / 3600, (up % 3600) / 60, up % 60,
                  (int)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024),
-                 proxy_gateway_is_enabled() ? "Enabled" : "Disabled");
+                 proxy_gateway_is_enabled() ? "Enabled" : "Disabled",
+                 battery_line);
     esp_err_t r = httpd_resp_sendstr(req, page);
     free(page);
     return r;
@@ -281,11 +316,12 @@ esp_err_t handler_setup_post(httpd_req_t *req) {
     int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (rec <= 0) return ESP_FAIL;
     buf[rec] = '\0';
-    char ns[64] = {0}, np[64] = {0};
+    char ns[64] = {0}, np[64] = {0}, hid_s[8] = {0};
     if (httpd_query_key_value(buf, "ssid", ns, sizeof(ns)) == ESP_OK) {
         httpd_query_key_value(buf, "pass", np, sizeof(np));
+        bool hidden = (httpd_query_key_value(buf, "hidden", hid_s, sizeof(hid_s)) == ESP_OK);
 
-        wifi_manager_set_credentials(ns, np);
+        wifi_manager_set_credentials(ns, np, hidden);
         app_state_set(APP_WIFI_CONNECTING);
         wifi_manager_start_connect();
 
@@ -302,6 +338,20 @@ esp_err_t handler_reset(httpd_req_t *req) {
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/");
     return httpd_resp_send(req, NULL, 0);
+}
+
+esp_err_t handler_name_get(httpd_req_t *req) {
+    set_no_cache(req, "text/html");
+
+    char esc[DEVICE_NAME_MAX * 2] = {0};
+    html_escape(device_name_get(), esc, sizeof(esc));
+
+    char *page = malloc(1024);
+    if (!page) return ESP_ERR_NO_MEM;
+    snprintf(page, 1024, PAGE_NAME_FMT, esc);
+    esp_err_t r = httpd_resp_sendstr(req, page);
+    free(page);
+    return r;
 }
 
 esp_err_t handler_proxy_get(httpd_req_t *req) {
@@ -373,6 +423,40 @@ esp_err_t handler_networks_get(httpd_req_t *req) {
 
     len += snprintf(page + len, 4096 - len, "%s", PAGE_NETWORKS_HEADER);
 
+    /* Scan results — kept at the top since this is the page's main
+     * purpose most of the time; the saved-networks list and add-form
+     * below can get long, and "Scan again" shouldn't require
+     * scrolling past all of that to reach. */
+    bool scanning = wifi_manager_scan_in_progress();
+    if (scanning) {
+        len += snprintf(page + len, 4096 - len,
+            "<p>Scanning...</p>"
+            "<meta http-equiv='refresh' content='2'>");
+    } else {
+        wifi_scan_result_t results[WIFI_MAX_SCAN_RESULTS];
+        int n = wifi_manager_get_scan_results(results, WIFI_MAX_SCAN_RESULTS);
+
+        len += snprintf(page + len, 4096 - len,
+            "<div style='text-align:left;background:#ecf0f1;padding:10px;'>"
+            "<b>Found nearby:</b> &nbsp; <a href='/networks/scan'>[scan again]</a><br>");
+        if (n == 0) {
+            len += snprintf(page + len, 4096 - len, "<i>No scan results yet</i><br>");
+        }
+        for (int i = 0; i < n && len < 3600; i++) {
+            char esc[64] = {0};
+            html_escape(results[i].ssid, esc, sizeof(esc));
+            char enc[100] = {0};
+            url_encode(results[i].ssid, enc, sizeof(enc));
+            len += snprintf(page + len, 4096 - len,
+                "<a href='/networks/connect?ssid=%s'>%s (%d dBm)</a>%s<br>",
+                enc, esc, (int)results[i].rssi,
+                results[i].saved ? " &nbsp;<i>saved</i>" : "");
+        }
+        len += snprintf(page + len, 4096 - len,
+            "</div>"
+            "<p><a href='/networks/scan'>Scan again</a></p><hr>");
+    }
+
     /* Saved networks */
     wifi_network_t saved[WIFI_MAX_SAVED_NETWORKS];
     int saved_count = wifi_manager_get_saved_networks(saved, WIFI_MAX_SAVED_NETWORKS);
@@ -388,8 +472,8 @@ esp_err_t handler_networks_get(httpd_req_t *req) {
         char esc[64] = {0};
         html_escape(saved[i].ssid, esc, sizeof(esc));
         len += snprintf(page + len, 4096 - len,
-            "%s &nbsp; <a href='/networks/delete?idx=%d' style='color:#e74c3c;'>[remove]</a><br>",
-            esc, i);
+            "%s%s &nbsp; <a href='/networks/delete?idx=%d' style='color:#e74c3c;'>[remove]</a><br>",
+            esc, saved[i].hidden ? " <i>(hidden)</i>" : "", i);
     }
     len += snprintf(page + len, 4096 - len, "</div><br>");
 
@@ -398,39 +482,10 @@ esp_err_t handler_networks_get(httpd_req_t *req) {
         "<form action='/networks/add' method='post'>"
         "<p>SSID:<br><input type='text' name='ssid' size='20' maxlength='32'></p>"
         "<p>Password: (optional)<br><input type='password' name='pass' size='20' maxlength='63'></p>"
+        "<p><label><input type='checkbox' name='hidden' value='1'> "
+        "This network is hidden (not broadcasting its name)</label></p>"
         "<p><input type='submit' value='Add Network' style='font-size:110%%;'></p>"
-        "</form><hr>");
-
-    /* Scan results */
-    bool scanning = wifi_manager_scan_in_progress();
-    if (scanning) {
-        len += snprintf(page + len, 4096 - len,
-            "<p>Scanning...</p>"
-            "<meta http-equiv='refresh' content='2'>");
-    } else {
-        wifi_scan_result_t results[WIFI_MAX_SCAN_RESULTS];
-        int n = wifi_manager_get_scan_results(results, WIFI_MAX_SCAN_RESULTS);
-
-        len += snprintf(page + len, 4096 - len,
-            "<div style='text-align:left;background:#ecf0f1;padding:10px;'>"
-            "<b>Found nearby:</b><br>");
-        if (n == 0) {
-            len += snprintf(page + len, 4096 - len, "<i>No scan results yet</i><br>");
-        }
-        for (int i = 0; i < n && len < 3600; i++) {
-            char esc[64] = {0};
-            html_escape(results[i].ssid, esc, sizeof(esc));
-            char enc[100] = {0};
-            url_encode(results[i].ssid, enc, sizeof(enc));
-            len += snprintf(page + len, 4096 - len,
-                "<a href='/networks/connect?ssid=%s'>%s (%d dBm)</a>%s<br>",
-                enc, esc, (int)results[i].rssi,
-                results[i].saved ? " &nbsp;<i>saved</i>" : "");
-        }
-        len += snprintf(page + len, 4096 - len, "</div><br>");
-        len += snprintf(page + len, 4096 - len,
-            "<a href='/networks/scan'>Scan again</a><br>");
-    }
+        "</form>");
 
     len += snprintf(page + len, 4096 - len, "%s", PAGE_NETWORKS_FOOTER);
 
@@ -444,10 +499,11 @@ esp_err_t handler_networks_add_post(httpd_req_t *req) {
     int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (rec <= 0) return ESP_FAIL;
     buf[rec] = '\0';
-    char ns[64] = {0}, np[64] = {0};
+    char ns[64] = {0}, np[64] = {0}, hid_s[8] = {0};
     if (httpd_query_key_value(buf, "ssid", ns, sizeof(ns)) == ESP_OK) {
         httpd_query_key_value(buf, "pass", np, sizeof(np));
-        wifi_manager_add_network(ns, np);
+        bool hidden = (httpd_query_key_value(buf, "hidden", hid_s, sizeof(hid_s)) == ESP_OK);
+        wifi_manager_add_network(ns, np, hidden);
         app_state_set(APP_WIFI_CONNECTING);
         wifi_manager_start_connect();
     }
@@ -517,6 +573,30 @@ esp_err_t handler_reboot(httpd_req_t *req) {
         "<html><body><p>Rebooting...</p></body></html>");
     safe_task_create(reboot_task, "reboot", 2048, NULL, 3, NULL);
     return ESP_OK;
+}
+
+esp_err_t handler_name_post(httpd_req_t *req) {
+    char buf[128] = {0};
+    int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (rec <= 0) return ESP_FAIL;
+    buf[rec] = '\0';
+
+    char raw[128] = {0};
+    if (httpd_query_key_value(buf, "name", raw, sizeof(raw)) == ESP_OK) {
+        char name[DEVICE_NAME_MAX + 1] = {0};
+        url_decode(raw, name, sizeof(name));
+        if (device_name_set(name)) {
+            httpd_resp_sendstr(req,
+                "<html><body><p>Saved. Rebooting...</p></body></html>");
+            safe_task_create(reboot_task, "reboot", 2048, NULL, 3, NULL);
+            return ESP_OK;
+        }
+    }
+
+    /* Empty or too-long name — reject without saving or rebooting. */
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "/name");
+    return httpd_resp_send(req, NULL, 0);
 }
 
 esp_err_t handler_favicon(httpd_req_t *req) {

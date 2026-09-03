@@ -14,6 +14,7 @@
 #include "app_state.h"
 #include "event_bus.h"
 #include "link_iface.h"
+#include "device_name.h"
 #include "config.h"
 #include "task_utils.h"
 
@@ -284,7 +285,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
  * ============================================================ */
 
 void bt_pan_init(void) {
-    gap_set_local_name("Satura Bridge");
+    gap_set_local_name(device_name_get());
     gap_discoverable_control(1);
     gap_connectable_control(1);
     gap_set_class_of_device(0x020302);
@@ -308,7 +309,7 @@ void bt_pan_init(void) {
                               sdp_create_service_record_handle(),
                               net_types, NULL, NULL, BNEP_SECURITY_NONE,
                               PAN_NET_ACCESS_TYPE_OTHER, 128000,
-                              "SaturaBridge", "BT PAN WiFi Bridge");
+                              device_name_get(), "BT PAN WiFi Bridge");
     sdp_register_service(pan_sdp_record);
 
     bnep_lwip_init();

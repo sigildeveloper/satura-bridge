@@ -44,7 +44,7 @@ bool nvs_storage_save_networks(const wifi_network_t *networks, int count) {
     return ok;
 }
 
-bool nvs_storage_add_network(const char *ssid, const char *pass) {
+bool nvs_storage_add_network(const char *ssid, const char *pass, bool hidden) {
     wifi_network_t list[WIFI_MAX_SAVED_NETWORKS];
     int count = nvs_storage_load_networks(list, WIFI_MAX_SAVED_NETWORKS);
 
@@ -53,6 +53,7 @@ bool nvs_storage_add_network(const char *ssid, const char *pass) {
         if (strcmp(list[i].ssid, ssid) == 0) {
             strncpy(list[i].pass, pass, sizeof(list[i].pass) - 1);
             list[i].pass[sizeof(list[i].pass) - 1] = '\0';
+            list[i].hidden = hidden;
             return nvs_storage_save_networks(list, count);
         }
     }
@@ -63,6 +64,7 @@ bool nvs_storage_add_network(const char *ssid, const char *pass) {
     list[count].ssid[sizeof(list[count].ssid) - 1] = '\0';
     strncpy(list[count].pass, pass, sizeof(list[count].pass) - 1);
     list[count].pass[sizeof(list[count].pass) - 1] = '\0';
+    list[count].hidden = hidden;
     count++;
 
     return nvs_storage_save_networks(list, count);
