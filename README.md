@@ -80,6 +80,10 @@ The proxy relay supports HTTP requests including POST bodies.
 
 For compatibility with older browsers and WAP software, proxy responses use HTTP/1.0-style framing with `Content-Length` or connection-close semantics instead of HTTP/1.1 chunked encoding.
 
+### Example gateway: 15pmm01.com
+
+[15pmm01.com](https://15pmm01.com/wap/en/) is a public WAP compression gateway that works well as a proxy target for old browsers — it re-compresses and simplifies pages on the fly, which helps a lot on the tiny screens and slow links this bridge is built for. It's built and maintained by [@petarmarinov37](https://t.me/petarmarinov37) on Telegram, who also runs other proxy servers for the retro-phone community.
+
 ---
 
 # Architecture
@@ -418,6 +422,8 @@ It uses GnuBox on the phone.
 
 Satura Bridge and Vetera Bridge target different generations of legacy mobile phones and use different networking technologies.
 
+Built and maintained by [@arifwn](https://github.com/arifwn) on GitHub.
+
 ---
 
 # License
@@ -587,6 +593,10 @@ Hostname разрешается и полученный IPv4-адрес кеши
 Proxy relay поддерживает POST body.
 
 Для совместимости со старыми браузерами и WAP-программами используется HTTP/1.0-style framing с `Content-Length` или закрытием соединения вместо HTTP/1.1 chunked encoding.
+
+### Пример шлюза: 15pmm01.com
+
+[15pmm01.com](https://15pmm01.com/wap/en/) — публичный WAP-компрессирующий шлюз, хорошо подходящий как значение для этого поля: он на лету пережимает и упрощает страницы, что заметно помогает на маленьких экранах и медленных каналах, под которые и делается этот бридж. Разрабатывает и поддерживает его [@petarmarinov37](https://t.me/petarmarinov37) в Telegram — он же держит и другие прокси-серверы для сообщества любителей ретро-телефонов.
 
 ---
 
@@ -786,6 +796,20 @@ idf.py build
 ```text
 ESP32-D0WDQ6-V3
 ```
+
+---
+
+# Похожие проекты
+
+## [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
+
+Vetera Bridge предоставляет интернет соединение для старых S60 v1 девайсов, по Bluetooth PPP, включая Nokia N-Gage. В общем, те аппараты, в которых еще не было поддержки Bluetooth PAN.
+
+На стороне телефона используется GnuBox для соединения.
+
+Satura Bridge и Vetera Bridge нацелены на разные поколения устройств с разным типом подключения.
+
+Создан и поддерживается [@arifwn](https://github.com/arifwn) на GitHub.
 
 ---
 
