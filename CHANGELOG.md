@@ -1,5 +1,83 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+## [0.0.16] – 2026-09-04
+
+### Added
+- **Clipboard (pasteboard)** – persistent storage for text snippets and links,
+  accessible via web UI (`/clip`). Supports pinning favorites (up to 8),
+  auto‑detection of HTTP/HTTPS links, and ring buffer (15 items).
+  Data survives reboots.
+- **Hidden Wi-Fi networks** – you can now add and connect to SSIDs that do not
+  broadcast their name. A checkbox in the “Add network” form marks a network as
+  hidden.
+- **Device name configuration** – change the Bluetooth device name via web UI
+  (`/name`); persists across reboots and auto‑generates a unique default
+  (e.g., “Satura Bridge A1B2”) using the last bytes of the BT MAC.
+- **Better Bluetooth re‑opening** – after disconnection (HCI or BNEP), the
+  bridge becomes visible again automatically, with a delay to avoid busy loops.
+
+### Changed
+- **Web UI overhaul**:
+  - New “Manage Networks” page (`/networks`) – shows scanned APs, saved
+    networks, allows adding/removing, and supports hidden SSIDs.
+  - Status page now shows battery percentage (if board supports it) and proxy
+    enabled/disabled.
+  - Proxy configuration page (`/proxy`) with enable/disable and host/port.
+  - Device name page (`/name`).
+  - Clipboard page (`/clip`).
+- **Board support** – board abstraction (`board/`) now provides battery and
+  charging status via `board_get_battery_percent()`, etc.
+- **Logging** – more informative heartbeat logs, including httpd stack headroom.
+- **Default Bluetooth name** – now derived from MAC address (instead of fixed
+  “Satura Bridge”).
+
+### Fixed
+- **Stability**:
+  - Fixed potential crashes when `nvs_flash_init()` fails on first boot (now
+    erases and retries).
+  - Fixed buffer overflow in `nvs_storage_load_networks()` when caller supplies
+    a smaller buffer than stored count (now reads into a full‑size local array
+    first).
+  - Fixed BNEP channel close not making the device visible again if HCI
+    disconnected before BNEP opened.
+  - Fixed DNS spoofing vulnerability – reply is accepted only from the same
+    upstream IP:port that was queried.
+  - Fixed proxy relay blocking indefinitely when upstream keeps connection open
+    (now respects Content‑Length and uses timeouts).
+  - Fixed `httpd` stack overflow risk by increasing stack size to 12 KB and
+    monitoring headroom.
+- **Wi‑Fi**:
+  - Connecting to a network with empty password now uses WIFI_AUTH_OPEN.
+  - Retry mechanism resets when credentials change.
+  - Hidden networks are now attempted even if not visible in scan results.
+- **Bluetooth**:
+  - PIN code request now responds with “0000” (legacy pairing).
+  - SSP user confirmation is auto‑accepted.
+  - RSSI value 0 (from unready connection) is ignored to avoid bogus reading.
+- **HTTP**:
+  - POST requests to `/setup` and `/networks/add` now correctly handle hidden
+    flag.
+  - `handler_name_post` rejects empty or too‑long names without rebooting.
+  - Port number validation in proxy settings rejects non‑numeric input.
+- **Build** – CMake now selects the correct board source file based on Kconfig.
+
+### Security
+- DNS upstream source validation prevents trivial spoofing on shared networks.
+- Proxy gateway forwards only essential headers (User‑Agent, Cookie, etc.) and
+  drops hop‑by‑hop headers.
+
+### Deprecated
+- None.
+
+### Removed
+- None.
+
+### Known Issues
+- Windows 10 Internet Connection Sharing via BT PAN is not supported.
+- M5Stack Core2 v1.1 (with AXP2101) is not supported fully.
+
 ## [Unreleased]
 
 ### Added

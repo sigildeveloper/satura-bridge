@@ -19,7 +19,7 @@
 #include "device_name.h"
 #include "battery.h"
 
-#define PROJECT_VERSION "v0.0.14"
+#define PROJECT_VERSION "v0.0.16"
 #define TELEGRAM_CHAT   "https://t.me/nnmidletschat"
 #define PAGE_FOOTER \
     "<hr><p>" \
