@@ -171,6 +171,36 @@ The same clipboard can be used from:
 * a computer connected to the Wi-Fi network/LAN;
 * another device that can reach the bridge web interface.
 
+### Accessing the Clipboard
+
+The clipboard is available at:
+
+```text
+http://<bridge-ip>/clip
+```
+
+The IP address depends on how you access Satura Bridge:
+
+* **From the legacy phone connected via Bluetooth PAN:** use the bridge's IP address in the Bluetooth PAN network:
+  `http://192.168.7.1/clip`
+* **From a computer or another device connected to the same Wi-Fi/LAN as Satura Bridge:** use the **Wi-Fi IP address assigned to the bridge by your router**, for example:
+  `http://192.168.1.123/clip`
+
+The two addresses can be different. The phone sees Satura Bridge as the gateway of its Bluetooth PAN network, while a computer on the normal LAN sees the bridge as a Wi-Fi client of the router.
+
+#### Example: computer → phone
+
+1. Connect Satura Bridge to Wi-Fi.
+2. Find the bridge's **Wi-Fi/LAN IP address** in the router's DHCP client list or on the Satura Bridge status page.
+3. On the computer, open:
+   `http://<bridge-wifi-ip>/clip`
+4. Add or paste the required text, URL, WEP key, code, or other data.
+5. On the legacy phone connected to Satura Bridge via Bluetooth PAN, open:
+   `http://<bridge-pan-ip>/clip`
+6. The same clipboard entries are available there.
+
+This makes the clipboard useful for transferring long text and URLs between a modern computer and a legacy phone without having to type them manually.
+
 ### Typical use
 
 For example, typing a long URL on a T9 keypad is inconvenient.
@@ -178,7 +208,7 @@ For example, typing a long URL on a T9 keypad is inconvenient.
 Instead:
 
 1. Connect the old phone to Satura Bridge over Bluetooth PAN.
-2. From a computer, open `http://192.168.7.1/clip`.
+2. From a computer, open `http://<bridge-pan-ip>/clip`.
 3. Paste or type the long URL/text into the clipboard.
 4. Save it.
 5. Open the clipboard page from the phone.
@@ -1109,7 +1139,7 @@ http://192.168.7.1/networks
 
 ---
 
-# Клипборд / буфер обмена
+## Клипборд / буфер обмена
 
 В Satura Bridge есть общий веб-клипборд, специально предназначенный для старых телефонов, на которых неудобно вводить длинный текст.
 
@@ -1128,12 +1158,11 @@ http://192.168.7.1/clip
 ### Как пользоваться
 
 Например, длинный URL неудобно вводить на T9-клавиатуре.
-
 1. Подключите старый телефон к Satura Bridge по Bluetooth PAN.
-2. На компьютере откройте `http://192.168.7.1/clip`.
+2. На компьютере откройте http://192.168.7.1/clip (или используйте Wi-Fi IP моста, если компьютер в той же сети).
 3. Вставьте или напечатайте длинный URL/текст.
 4. Сохраните запись.
-5. Откройте `/clip` с телефона.
+5. Откройте /clip с телефона.
 6. Используйте сохранённую запись на телефоне.
 
 Клипборд особенно полезен для:
@@ -1149,13 +1178,13 @@ http://192.168.7.1/clip
 
 Клипборд имеет:
 
-* **15 последних записей**;
-* до **8 закреплённых / избранных записей**;
+* 15 последних записей в кольцевом буфере;
+* до 8 закреплённых / избранных записей;
 * сохранение после перезагрузки;
 * удаление и закрепление/открепление записей;
-* автоматическое распознавание HTTP/HTTPS ссылок.
+* автоматическое распознавание HTTP/HTTPS ссылок (становятся кликабельными).
 
-Когда история заполняется, самые старые обычные записи вытесняются. Закреплённые записи хранятся отдельно.
+Когда история заполняется, самые старые обычные записи вытесняются. Закреплённые записи хранятся отдельно и никогда не удаляются автоматически.
 
 ---
 
