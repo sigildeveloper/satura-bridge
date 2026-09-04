@@ -2,7 +2,9 @@
 
 **«Bringing old phones back online.»**
 
-Open-source Bluetooth Classic PAN → Internet gateway for legacy mobile phones and Symbian devices, currently using Wi-Fi as the uplink.
+Open-source Bluetooth Classic PAN → Internet gateway for legacy mobile phones and Symbian devices, running on ESP32.
+
+Satura Bridge currently uses **Bluetooth Classic PAN as the downlink** and **Wi-Fi as the Internet uplink**.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v0.0.15-green.svg)](https://github.com/sigildeveloper/satura-bridge/releases/tag/v0.0.15)
@@ -10,11 +12,11 @@ Open-source Bluetooth Classic PAN → Internet gateway for legacy mobile phones 
 
 ---
 
-## What is Satura Bridge?
+# What is Satura Bridge?
 
 Satura Bridge is a small ESP32-based Bluetooth Classic PAN gateway for legacy mobile phones.
 
-The phone connects through Bluetooth PAN, while the ESP32 currently uses Wi-Fi as its Internet uplink and performs NAT between the two links.
+The phone connects through Bluetooth PAN, while the ESP32 uses Wi-Fi as its Internet uplink and performs NAT between the two links.
 
 Many older Nokia Symbian, Sony Ericsson and other legacy devices have Bluetooth but no Wi-Fi. Satura Bridge provides Internet access without requiring special phone software when the device supports the required Bluetooth networking profile.
 
@@ -38,13 +40,50 @@ Many older Nokia Symbian, Sony Ericsson and other legacy devices have Bluetooth 
        Internet
 ```
 
-> **Current transport support:** Bluetooth Classic PAN as downlink and Wi-Fi as uplink. The transport abstraction is ready for additional implementations, but Bluetooth PPP, Ethernet, Serial/IR and cellular modem transports are not yet user-facing features.
+> **Current transport support:** Bluetooth Classic PAN as downlink and Wi-Fi as uplink. The transport abstraction is ready for additional implementations, but Bluetooth PPP, Ethernet, Serial/IR and cellular modem transports are not currently implemented as user-facing features.
 
 > **Compatibility:** Windows 10 Internet connectivity is currently not supported. Older Android devices, Sony Ericsson J108, NetFront 3.4 and J2ME applications have been tested successfully.
 
 ---
 
-## Features
+# Supported Hardware
+
+Satura Bridge now has separate board profiles.
+
+| Board                    | Flash | Battery / Power                   | Build profile |
+| ------------------------ | ----- | --------------------------------- | ------------- |
+| Generic ESP32 DevKit     | 2 MB  | No board-specific battery support | `generic`     |
+| M5Stack Core2 (original) | 16 MB | AXP192 battery / charging         | `core2`       |
+| M5StickC Plus2           | 8 MB  | Battery voltage via ADC           | `plus2`       |
+
+### M5Stack Core2
+
+The supported Core2 revision is the **original M5Stack Core2 using the AXP192 PMIC**.
+
+The Core2 v1.1 revision, which uses the AXP2101 PMIC, is not currently supported by the Core2 board backend.
+
+### M5StickC Plus2
+
+The Plus2 uses:
+
+* ESP32-PICO-V3-02
+* 8 MB flash
+* 2 MB PSRAM
+* 200 mAh battery
+* GPIO4 for power hold
+* GPIO38 for battery voltage measurement
+
+The Plus2 does not currently expose a documented charging-status signal, so the firmware reports battery percentage but does not report charging state.
+
+### Generic ESP32
+
+The Generic profile is intended for ESP32 boards without board-specific power-management hardware.
+
+It uses a **2 MB flash configuration**.
+
+---
+
+# Features
 
 * Bluetooth Classic PAN / NAP
 * Wi-Fi Internet uplink
@@ -64,13 +103,19 @@ Many older Nokia Symbian, Sony Ericsson and other legacy devices have Bluetooth 
 * DNS forwarding with upstream source verification
 * HTTP worker stack high-water-mark monitoring
 * Explicit `-Os` size optimization
-* Single-file firmware flashing
+* Board abstraction layer
+* Independent build configurations for supported boards
+* Single-file full firmware images
 
 ---
 
-## HTTP Proxy Gateway
+# HTTP Proxy Gateway
 
-Configure the optional HTTP proxy at `/proxy`.
+Configure the optional HTTP proxy at:
+
+```text
+http://192.168.7.1/proxy
+```
 
 The gateway can be specified using either an IPv4 address or a hostname.
 
@@ -82,13 +127,15 @@ For compatibility with older browsers and WAP software, proxy responses use HTTP
 
 ### Example gateway: 15pmm01.com
 
-[15pmm01.com](https://15pmm01.com/wap/en/) is a public WAP compression gateway that works well as a proxy target for old browsers — it re-compresses and simplifies pages on the fly, which helps a lot on the tiny screens and slow links this bridge is built for. It's built and maintained by [@petarmarinov37](https://t.me/petarmarinov37) on Telegram, who also runs other proxy servers for the retro-phone community.
+[15pmm01.com](https://15pmm01.com/wap/en/) is a public WAP compression gateway that works well as a proxy target for old browsers. It re-compresses and simplifies pages on the fly, which is useful for the small screens and slow connections this project targets.
+
+It is built and maintained by [@petarmarinov37](https://t.me/petarmarinov37) on Telegram.
 
 ---
 
 # Architecture
 
-Starting with v0.0.15, the networking core is transport-agnostic.
+The networking core is transport-agnostic.
 
 ```text
                  ┌──────────────────────┐
@@ -110,28 +157,28 @@ Starting with v0.0.15, the networking core is transport-agnostic.
                   └─────────┘      └─────────┘
 ```
 
-### `link_iface`
+## `link_iface`
 
 `link_iface_t` provides a generic interface for a network link.
 
 The networking core does not need to know whether the underlying link is Bluetooth, Wi-Fi, Ethernet, a cellular modem or another transport.
 
-### `link_registry`
+## `link_registry`
 
 `link_registry` keeps track of the currently active link for each role:
 
 * `DOWNLINK`
 * `UPLINK`
 
-### `nat_bridge`
+## `nat_bridge`
 
 `nat_bridge` performs the bridge/NAT functionality through the generic link interface instead of depending directly on Bluetooth PAN or Wi-Fi.
 
-This makes it possible to add new transports without rewriting the NAT, HTTP or DNS layers.
+This allows new transports to be added without rewriting the NAT, HTTP or DNS layers.
 
-### Event bus
+## Event bus
 
-Generic link state events are available:
+Generic link-state events are available:
 
 * `EVENT_DOWNLINK_UP`
 * `EVENT_DOWNLINK_DOWN`
@@ -140,7 +187,7 @@ Generic link state events are available:
 
 Transport-specific modules can publish these events alongside their own transport-specific events.
 
-### Future transports
+## Future transports
 
 The architecture is intended to allow implementations such as:
 
@@ -150,7 +197,7 @@ The architecture is intended to allow implementations such as:
 * Cellular / 4G / 5G modem
 * Other network interfaces
 
-These are **not currently implemented as user-facing transports**.
+These are not currently implemented as user-facing transports.
 
 ---
 
@@ -176,7 +223,7 @@ v0.0.15 is primarily an **architecture, reliability and hardening release**.
 
 ## Wi-Fi
 
-* Wi-Fi manager now uses a single-owner queue-based state machine.
+* Wi-Fi manager uses a single-owner queue-based state machine.
 * Connect, scan, retry and recovery operations are handled through the same state machine.
 * Improved connection recovery and failover behavior.
 
@@ -184,6 +231,7 @@ v0.0.15 is primarily an **architecture, reliability and hardening release**.
 
 * NVS access is centralized behind the storage abstraction.
 * `http_server.c` was split into:
+
   * `http_routes.c`
   * `proxy_relay.c`
 * The remaining `http_server.c` handles server startup and URI registration.
@@ -204,53 +252,198 @@ v0.0.15 was tested on a Sony Ericsson J108 with:
 * Bluetooth PAN reconnection
 * Wi-Fi failover
 * NAT following independent Bluetooth/Wi-Fi link state changes
-* HTTP proxy relay traffic to a real external website
+* HTTP proxy relay traffic
 * HTML, CSS and image loading through the proxy
-
-[Release v0.0.15](https://github.com/sigildeveloper/satura-bridge/releases/tag/v0.0.15) includes the prebuilt `satura-bridge-v0.0.15.bin` firmware.
-
----
-
-# Hardware
-
-| Component | Recommended | Minimum |
-| --------- | ----------- | ------- |
-| Board | M5Stack Core2 | ESP32-WROOM-32 |
-| Power | Built-in battery | Any USB 5V supply |
-
-The current development hardware uses ESP32-D0WDQ6-V3.
-
-Satura Bridge requires an ESP32 variant with Bluetooth Classic support.
-
-Bluetooth and Wi-Fi operate simultaneously and share ESP32 RF resources, so antenna design and placement can affect stability and performance.
 
 ---
 
 # Quick Start
 
-## Flash
+## 1. Build
 
-See [FLASH.md](FLASH.md).
+Requires **ESP-IDF v5.4.x**.
 
-The latest firmware is:
-
-```text
-firmware/satura-bridge-v0.0.15.bin
-```
-
-A browser-based flashing option is also available through ESP Web Tools.
-
-Alternatively:
+Clone the repository:
 
 ```bash
-esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.15.bin
+git clone --recursive https://github.com/sigildeveloper/satura-bridge
+cd satura-bridge
 ```
 
-## Connect a phone
+### Build all supported boards
 
-1. Enable Bluetooth.
+On Windows PowerShell:
+
+```powershell
+.\build.ps1
+```
+
+This builds:
+
+```text
+Generic ESP32 DevKit
+M5Stack Core2
+M5StickC Plus2
+```
+
+and creates independent build directories:
+
+```text
+build/
+├── generic/
+├── core2/
+└── stickc_plus2/
+```
+
+The generated full firmware images are placed in:
+
+```text
+firmware/
+├── generic/
+│   └── satura-bridge-generic-full.bin
+├── core2/
+│   └── satura-bridge-core2-full.bin
+└── stickc_plus2/
+    └── satura-bridge-stickc_plus2-full.bin
+```
+
+The build script does not flash the device.
+
+### Build a specific board
+
+```powershell
+.\build.ps1 generic
+.\build.ps1 core2
+.\build.ps1 plus2
+```
+
+### Rebuild
+
+Build everything from a clean build directory:
+
+```powershell
+.\build.ps1 rebuild
+```
+
+Or rebuild a specific board:
+
+```powershell
+.\build.ps1 rebuild core2
+```
+
+### Clean build directories
+
+```powershell
+.\build.ps1 clean
+```
+
+---
+
+# ESP-IDF Configuration
+
+Each board has its own independent ESP-IDF `sdkconfig`.
+
+```text
+build/
+├── generic/
+│   └── sdkconfig
+├── core2/
+│   └── sdkconfig
+└── stickc_plus2/
+    └── sdkconfig
+```
+
+The board-specific defaults are:
+
+```text
+sdkconfig.defaults
+sdkconfig.defaults.generic
+sdkconfig.defaults.core2
+sdkconfig.defaults.stickc_plus2
+```
+
+The common configuration is stored in:
+
+```text
+sdkconfig.defaults
+```
+
+Board-specific settings are stored in the corresponding board defaults file.
+
+## Menuconfig
+
+Open menuconfig for Generic ESP32:
+
+```powershell
+idf.py -B build\generic menuconfig
+```
+
+For M5Stack Core2:
+
+```powershell
+idf.py -B build\core2 menuconfig
+```
+
+For M5StickC Plus2:
+
+```powershell
+idf.py -B build\stickc_plus2 menuconfig
+```
+
+Changes made through menuconfig are stored in that board's build directory and do not modify the other board configurations.
+
+---
+
+# Flashing
+
+See [FLASH.md](FLASH.md) for detailed flashing instructions.
+
+For example, to flash an M5Stack Core2 using ESP-IDF:
+
+```powershell
+idf.py -B build\core2 -p COM6 flash
+```
+
+To open the serial monitor:
+
+```powershell
+idf.py -B build\core2 -p COM6 monitor
+```
+
+Or both:
+
+```powershell
+idf.py -B build\core2 -p COM6 flash monitor
+```
+
+---
+
+# Web Interface
+
+The web interface is available at:
+
+```text
+http://192.168.7.1
+```
+
+| Page        | Description                               |
+| ----------- | ----------------------------------------- |
+| `/`         | Status, RSSI, uptime and heap information |
+| `/setup`    | Manual Wi-Fi configuration                |
+| `/networks` | Scan and manage saved Wi-Fi networks      |
+| `/proxy`    | Configure HTTP proxy gateway              |
+| `/reset`    | Remove all saved Wi-Fi networks           |
+| `/reboot`   | Restart the device                        |
+
+---
+
+# First Boot
+
+After flashing the firmware:
+
+1. Enable Bluetooth on the phone.
 2. Find **Satura Bridge**.
-3. Pair with the device.
+3. Pair and connect the phone.
 4. If a PIN is requested, use `0000`.
 5. Open the phone browser.
 6. Open `http://192.168.7.1` or any HTTP URL.
@@ -260,34 +453,17 @@ Saved Wi-Fi settings survive reboot and the device automatically attempts to rec
 
 ---
 
-# Web Interface
-
-The web interface is available at:
-
-**http://192.168.7.1**
-
-| Page | Description |
-| ---- | ----------- |
-| `/` | Status, RSSI, uptime and heap information |
-| `/setup` | Manual Wi-Fi configuration |
-| `/networks` | Scan and manage saved Wi-Fi networks |
-| `/proxy` | Configure HTTP proxy gateway |
-| `/reset` | Remove all saved Wi-Fi networks |
-| `/reboot` | Restart the device |
-
----
-
 # Performance
 
 Typical measured values:
 
-| Parameter | Value |
-| --------- | ----- |
-| Download | ~0.15–0.20 Mbit/s |
-| Upload | ~0.20–0.27 Mbit/s |
-| Ping | 150–200 ms |
-| Maximum Bluetooth PAN clients | 1 |
-| Power draw | ~200 mA from USB |
+| Parameter                     | Value             |
+| ----------------------------- | ----------------- |
+| Download                      | ~0.15–0.20 Mbit/s |
+| Upload                        | ~0.20–0.27 Mbit/s |
+| Ping                          | 150–200 ms        |
+| Maximum Bluetooth PAN clients | 1                 |
+| Power draw                    | ~200 mA from USB  |
 
 Actual performance depends on RF conditions and the Bluetooth PAN implementation.
 
@@ -303,12 +479,12 @@ The available performance is normally sufficient for:
 
 # Compatibility
 
-| Device / Platform | Result |
-| ----------------- | ------ |
-| Sony Ericsson J108 | Tested |
+| Device / Platform     | Result  |
+| --------------------- | ------- |
+| Sony Ericsson J108    | Tested  |
 | Older Android devices | Working |
-| NetFront 3.4 | Working |
-| J2ME / Opera Mini | Working |
+| NetFront 3.4          | Working |
+| J2ME / Opera Mini     | Working |
 | Built-in email client | Working |
 
 Windows 10 Internet connectivity is currently **not supported**.
@@ -344,6 +520,11 @@ https://t.me/nnmidletschat
 * [x] Proxy POST body forwarding
 * [x] Proxy hostname resolution
 * [x] Transport-agnostic link abstraction
+* [x] Board abstraction layer
+* [x] Generic ESP32 board profile
+* [x] M5Stack Core2 board profile
+* [x] M5StickC Plus2 board profile
+* [x] Independent board build configurations
 * [ ] Bluetooth PPP downlink
 * [ ] Serial / IR downlink
 * [ ] Ethernet uplink
@@ -356,59 +537,63 @@ https://t.me/nnmidletschat
 
 ---
 
-# Building from Source
-
-Requires [ESP-IDF v5.4.x](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
-
-```bash
-git clone --recursive https://github.com/sigildeveloper/satura-bridge
-cd satura-bridge
-idf.py build
-idf.py flash monitor
-```
-
-For a clean rebuild after changing SDK configuration:
-
-```bash
-idf.py fullclean
-idf.py build
-```
-
----
-
 # Project Structure
 
 ```text
 satura-bridge/
 ├── main/
+│   ├── board/
+│   │   ├── board.h
+│   │   ├── board_generic.c
+│   │   ├── board_core2.c
+│   │   └── board_stickc_plus2.c
+│   │
 │   ├── main.c
-│   ├── app_bootstrap.c/.h     # Application startup/core coordination
-│   ├── app_state.c/.h         # Runtime bridge state
-│   ├── bt_pan.c/.h            # Bluetooth PAN / BNEP transport
-│   ├── wifi_manager.c/.h      # Wi-Fi state machine/recovery
-│   ├── link_iface.c/.h        # Generic network interface
-│   ├── link_registry.c/.h     # Active downlink/uplink registry
-│   ├── nat_bridge.c/.h        # Transport-independent NAT
-│   ├── event_bus.c/.h         # Generic event bus
-│   ├── storage.c/.h           # Persistent storage abstraction
-│   ├── proxy_gateway.c/.h     # Proxy configuration/resolution
-│   ├── proxy_relay.c/.h       # Raw-socket proxy relay
-│   ├── dns_server.c/.h        # DNS forwarding/cache/captive replies
-│   ├── http_server.c/.h       # HTTP server startup/URI registration
-│   ├── http_routes.c/.h       # Web UI/configuration handlers
-│   ├── http_utils.c/.h        # HTTP helpers
-│   ├── watchdog.c/.h          # Watchdog/recovery
-│   ├── uptime.c/.h            # Uptime tracking
-│   ├── config.h               # Shared constants
-│   └── btstack_config.h       # BTstack configuration
-├── components/                # BTstack and dependencies
+│   ├── app_bootstrap.c
+│   ├── app_state.c
+│   ├── battery.c
+│   ├── bt_pan.c
+│   ├── clipboard.c
+│   ├── config.h
+│   ├── device_name.c
+│   ├── dns_server.c
+│   ├── event_bus.c
+│   ├── http_routes.c
+│   ├── http_server.c
+│   ├── http_utils.c
+│   ├── link_iface.h
+│   ├── link_registry.c
+│   ├── nat_bridge.c
+│   ├── nvs_storage.c
+│   ├── proxy_gateway.c
+│   ├── proxy_relay.c
+│   ├── storage.c
+│   ├── uptime.c
+│   ├── watchdog.c
+│   ├── wifi_manager.c
+│   ├── Kconfig
+│   └── CMakeLists.txt
+│
+├── components/
+│   └── ...
+│
 ├── firmware/
-│   └── satura-bridge-v0.0.15.bin
+│   ├── generic/
+│   ├── core2/
+│   └── stickc_plus2/
+│
 ├── sdkconfig.defaults
+├── sdkconfig.defaults.generic
+├── sdkconfig.defaults.core2
+├── sdkconfig.defaults.stickc_plus2
+├── build.ps1
+├── CMakeLists.txt
 ├── FLASH.md
 ├── CHANGELOG.md
 └── README.md
 ```
+
+Build output under `build/` is generated locally and is not part of the source tree.
 
 ---
 
@@ -436,7 +621,9 @@ BTstack in `components/btstack/` is distributed under its own license.
 
 See:
 
-[`components/btstack/LICENSE`](components/btstack/LICENSE)
+```text
+components/btstack/LICENSE
+```
 
 ---
 
@@ -460,7 +647,7 @@ Satura Bridge — открытый Bluetooth Classic PAN → Internet шлюз �
 
 ---
 
-## Что такое Satura Bridge?
+# Что такое Satura Bridge?
 
 Satura Bridge позволяет старым телефонам с Bluetooth получать доступ в интернет через Wi-Fi.
 
@@ -490,9 +677,149 @@ Satura Bridge позволяет старым телефонам с Bluetooth п
 
 ---
 
-## Архитектура v0.0.15
+# Поддерживаемое железо
 
-В v0.0.15 сетевое ядро стало независимым от конкретного транспорта.
+| Плата                                | Flash | Профиль сборки |
+| ------------------------------------ | ----- | -------------- |
+| Generic ESP32 DevKit                 | 2 MB  | `generic`      |
+| M5Stack Core2 (оригинальный, AXP192) | 16 MB | `core2`        |
+| M5StickC Plus2                       | 8 MB  | `plus2`        |
+
+Для Core2 поддерживается оригинальная ревизия с **AXP192**.
+
+Core2 v1.1 с **AXP2101** пока не поддерживается.
+
+M5StickC Plus2 использует GPIO4 для удержания питания после запуска и GPIO38 для измерения напряжения аккумулятора.
+
+---
+
+# Сборка
+
+Требуется **ESP-IDF v5.4.x**.
+
+После клонирования репозитория:
+
+```powershell
+git clone --recursive https://github.com/sigildeveloper/satura-bridge
+cd satura-bridge
+```
+
+## Собрать все платы
+
+```powershell
+.\build.ps1
+```
+
+Будут собраны:
+
+```text
+Generic ESP32 DevKit
+M5Stack Core2
+M5StickC Plus2
+```
+
+Для каждой платы используется отдельный каталог:
+
+```text
+build/
+├── generic/
+├── core2/
+└── stickc_plus2/
+```
+
+Готовые полные прошивки:
+
+```text
+firmware/
+├── generic/
+│   └── satura-bridge-generic-full.bin
+├── core2/
+│   └── satura-bridge-core2-full.bin
+└── stickc_plus2/
+    └── satura-bridge-stickc_plus2-full.bin
+```
+
+Скрипт сборки **не прошивает устройство**.
+
+## Собрать одну плату
+
+```powershell
+.\build.ps1 generic
+.\build.ps1 core2
+.\build.ps1 plus2
+```
+
+## Полная пересборка
+
+```powershell
+.\build.ps1 rebuild
+```
+
+Или:
+
+```powershell
+.\build.ps1 rebuild core2
+```
+
+## Menuconfig
+
+Для Generic:
+
+```powershell
+idf.py -B build\generic menuconfig
+```
+
+Для Core2:
+
+```powershell
+idf.py -B build\core2 menuconfig
+```
+
+Для Plus2:
+
+```powershell
+idf.py -B build\stickc_plus2 menuconfig
+```
+
+Каждая плата имеет собственный `sdkconfig`.
+
+Общие настройки находятся в:
+
+```text
+sdkconfig.defaults
+```
+
+Настройки плат:
+
+```text
+sdkconfig.defaults.generic
+sdkconfig.defaults.core2
+sdkconfig.defaults.stickc_plus2
+```
+
+---
+
+# Прошивка
+
+Для подробной инструкции см. [`FLASH.md`](FLASH.md).
+
+Например, для M5Stack Core2 на COM6:
+
+```powershell
+idf.py -B build\core2 -p COM6 flash
+```
+
+Прошить и открыть монитор:
+
+```powershell
+idf.py -B build\core2 -p COM6 flash monitor
+```
+
+---
+
+# Архитектура v0.0.15
+
+Сетевое ядро не зависит от конкретного транспорта.
 
 ```text
                   ┌─────────────────┐
@@ -542,7 +869,7 @@ Satura Bridge позволяет старым телефонам с Bluetooth п
 
 ---
 
-## Возможности
+# Возможности
 
 * Bluetooth Classic PAN / NAP
 * Wi-Fi uplink
@@ -565,6 +892,8 @@ Satura Bridge позволяет старым телефонам с Bluetooth п
 * Проверка источника DNS-ответов
 * HTTP worker stack monitoring
 * `-Os` optimization
+* Board abstraction layer
+* Независимые конфигурации для разных плат
 
 ---
 
@@ -600,143 +929,55 @@ Proxy relay поддерживает POST body.
 
 ---
 
-## v0.0.15 — что изменилось
+# Первый запуск
 
-v0.0.15 — в первую очередь релиз **архитектурного рефакторинга, оптимизации и повышения надёжности**.
-
-### Transport abstraction
-
-* Добавлен `link_iface_t`.
-* Добавлен `link_registry`.
-* `nat_bridge` отвязан от BT PAN и Wi-Fi.
-* Добавлены generic events:
-  * `EVENT_DOWNLINK_UP`
-  * `EVENT_DOWNLINK_DOWN`
-  * `EVENT_UPLINK_UP`
-  * `EVENT_UPLINK_DOWN`
-* Создана основа для Bluetooth PPP, Serial/IR, Ethernet и cellular modem.
-* `bt_pan` теперь реагирует на `EVENT_BT_CONNECTED`, а не вызывает `wifi_manager` напрямую.
-
-### Wi-Fi
-
-* Wi-Fi manager переведён на queue-based state machine.
-* Connect, scan, retry и recovery используют единого владельца очереди.
-* Улучшено восстановление соединения.
-
-### DNS и proxy
-
-* DNS теперь принимает ответы только от настроенного upstream DNS-сервера.
-* Проверяются IP и порт источника DNS-ответа.
-* Proxy relay больше не использует HTTP/1.1 chunked framing для legacy clients.
-* Используется HTTP/1.0-compatible framing.
-* Добавлена поддержка POST request bodies.
-* Proxy gateway может задаваться hostname.
-* IPv4-результат hostname кешируется.
-
-### Структура проекта
-
-* NVS доступ централизован через storage abstraction.
-* `http_server.c` разделён на:
-  * `http_routes.c`
-  * `proxy_relay.c`
-* `pan_wifi_bridge.c` переименован в `app_bootstrap.c`.
-
-### Оптимизация
-
-* Явно зафиксирован `-Os`.
-* IRAM usage уменьшен примерно с **79.7% до 74.31%**.
-* Размер firmware уменьшен примерно на **65 KB**.
-* Добавлен HTTP worker stack high-water-mark logging.
-
-### Исправления
-
-* Исправлен `EVENT_TYPE_COUNT`, из-за которого новые события могли теряться при превышении старого hardcoded count.
-
-### Тестирование
-
-v0.0.15 протестирован на Sony Ericsson J108:
-
-* BT PAN connect
-* BT PAN reconnect
-* Wi-Fi failover
-* независимое состояние BT/Wi-Fi для NAT
-* proxy relay
-* внешний сайт
-* HTML
-* CSS
-* изображения
-
-Релиз:
-
-**v0.0.15**
-
-Firmware:
-
-```text
-firmware/satura-bridge-v0.0.15.bin
-```
-
----
-
-## Быстрый старт
-
-### 1. Прошивка
-
-См. [`FLASH.md`](FLASH.md).
-
-Или прошейте:
-
-```text
-firmware/satura-bridge-v0.0.15.bin
-```
-
-### 2. Bluetooth
+После прошивки:
 
 1. Включите Bluetooth.
 2. Найдите **Satura Bridge**.
 3. Выполните pairing.
 4. PIN: `0000`, если запрашивается.
-
-### 3. Настройка Wi-Fi
-
-Откройте:
+5. Откройте браузер телефона.
+6. Откройте:
 
 ```text
 http://192.168.7.1
 ```
 
-и настройте Wi-Fi.
+7. Настройте Wi-Fi.
+
+Сохранённые Wi-Fi сети переживают перезагрузку.
 
 ---
 
-## Веб-интерфейс
+# Веб-интерфейс
 
-| Страница | Назначение |
-| -------- | ---------- |
-| `/` | Статус, RSSI, uptime, heap |
-| `/setup` | Настройка Wi-Fi |
+| Страница    | Назначение                       |
+| ----------- | -------------------------------- |
+| `/`         | Статус, RSSI, uptime, heap       |
+| `/setup`    | Настройка Wi-Fi                  |
 | `/networks` | Сканирование и управление сетями |
-| `/proxy` | HTTP proxy |
-| `/reset` | Удаление Wi-Fi сетей |
-| `/reboot` | Перезагрузка |
+| `/proxy`    | HTTP proxy                       |
+| `/reset`    | Удаление Wi-Fi сетей             |
+| `/reboot`   | Перезагрузка                     |
 
 ---
 
-## Совместимость
+# Совместимость
 
-| Устройство / ПО | Результат |
-| ---------------- | --------- |
+| Устройство / ПО    | Результат      |
+| ------------------ | -------------- |
 | Sony Ericsson J108 | Протестировано |
-| Старые Android | Работает |
-| NetFront 3.4 | Работает |
-| J2ME / Opera Mini | Работает |
-| Встроенный email | Работает |
+| Старые Android     | Работает       |
+| NetFront 3.4       | Работает       |
+| J2ME / Opera Mini  | Работает       |
+| Встроенный email   | Работает       |
 
 Windows 10 пока не поддерживается.
 
 ---
 
-## Roadmap
+# Roadmap
 
 * [x] Bluetooth Classic PAN
 * [x] Wi-Fi Internet
@@ -752,6 +993,10 @@ Windows 10 пока не поддерживается.
 * [x] POST body forwarding
 * [x] Proxy hostname resolution
 * [x] Transport-agnostic link abstraction
+* [x] Board abstraction layer
+* [x] Generic ESP32 profile
+* [x] M5Stack Core2 profile
+* [x] M5StickC Plus2 profile
 * [ ] Bluetooth PPP
 * [ ] Serial / IR
 * [ ] Ethernet uplink
@@ -764,66 +1009,33 @@ Windows 10 пока не поддерживается.
 
 ---
 
-## Сборка
-
-Требуется ESP-IDF v5.4.x.
-
-```bash
-git clone --recursive https://github.com/sigildeveloper/satura-bridge
-cd satura-bridge
-idf.py build
-idf.py flash monitor
-```
-
-Для чистой пересборки:
-
-```bash
-idf.py fullclean
-idf.py build
-```
-
----
-
-## Железо
-
-| Компонент | Рекомендуемый | Минимальный |
-| --------- | ------------- | ----------- |
-| Плата | M5Stack Core2 | ESP32-WROOM-32 |
-| Питание | Встроенная батарея | USB 5V |
-
-Текущее тестовое устройство:
-
-```text
-ESP32-D0WDQ6-V3
-```
-
----
-
 # Похожие проекты
 
 ## [Vetera Bridge](https://github.com/arifwn/vetera-bridge)
 
-Vetera Bridge предоставляет интернет соединение для старых S60 v1 девайсов, по Bluetooth PPP, включая Nokia N-Gage. В общем, те аппараты, в которых еще не было поддержки Bluetooth PAN.
+Vetera Bridge предоставляет интернет-соединение для старых S60 v1 устройств по Bluetooth PPP, включая Nokia N-Gage.
 
-На стороне телефона используется GnuBox для соединения.
+На стороне телефона используется GnuBox.
 
-Satura Bridge и Vetera Bridge нацелены на разные поколения устройств с разным типом подключения.
+Satura Bridge и Vetera Bridge нацелены на разные поколения устройств и используют разные сетевые технологии.
 
-Создан и поддерживается [@arifwn](https://github.com/arifwn) на GitHub.
+Создан и поддерживается [@arifwn](https://github.com/arifwn).
 
 ---
 
-## Лицензия
+# Лицензия
 
 MIT License.
 
-BTstack в `components/btstack/` распространяется по собственной лицензии:
+BTstack в `components/btstack/` распространяется по собственной лицензии.
 
-[`components/btstack/LICENSE`](components/btstack/LICENSE)
+```text
+components/btstack/LICENSE
+```
 
 ---
 
-## Автор и сообщество
+# Автор и сообщество
 
 **Автор:** [@sigdev](https://github.com/sigildeveloper)
 

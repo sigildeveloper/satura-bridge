@@ -1,8 +1,9 @@
-# ESP-IDF build artifacts
+# ESP-IDF generated files
+build/
 sdkconfig
 sdkconfig.old
-build/
-dependencies.lock
+
+# Build artifacts
 *.bin
 *.elf
 *.map
@@ -13,8 +14,11 @@ dependencies.lock
 *.gcno
 *.gcda
 *.gcov
-*.bin
-!firmware/*.bin
+
+# Release firmware
+!firmware/
+!firmware/*/
+!firmware/*/*.bin
 
 # IDE
 .vscode/

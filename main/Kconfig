@@ -1,0 +1,34 @@
+menu "Satura Bridge"
+
+choice SATURA_BOARD
+    prompt "Hardware board"
+    default SATURA_BOARD_GENERIC
+    help
+        Selects which main/board/board_*.c backend is compiled into
+        the build. Application code (WiFi, BT PAN, NAT, HTTP, DNS,
+        clipboard, device name, ...) does not change based on this
+        choice — only main/board/ does. Exactly one backend is ever
+        compiled in.
+
+    config SATURA_BOARD_GENERIC
+        bool "Generic ESP32 DevKit"
+        help
+            No PMIC, no battery. board_get_battery_percent() and
+            related calls always report "unavailable".
+
+    config SATURA_BOARD_CORE2
+        bool "M5Stack Core2 (original, AXP192)"
+        help
+            Not the Core2 v1.1 revision — that one uses an AXP2101
+            PMIC instead, which this backend does not support.
+
+    config SATURA_BOARD_STICKC_PLUS2
+        bool "M5StickC Plus2"
+        help
+            No PMIC on this board. Power hold is done via GPIO4 and
+            battery voltage via ADC on GPIO38. Charging status is not
+            available on this board (no documented signal for it).
+
+endchoice
+
+endmenu

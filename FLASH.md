@@ -1,241 +1,307 @@
 # Flashing / Прошивка
 
-## Flashing
+Satura Bridge поддерживает несколько аппаратных профилей. Для каждой платы используется собственная конфигурация и собственный полный firmware image.
 
-### Option 1 — Online Flashing
+## Supported boards
 
-**No additional software required. Recommended.**
-
-The easiest way to flash Satura Bridge is to use the browser-based ESP Web Tools flasher.
-
-1. Open https://esp.huhn.me in Google Chrome or Microsoft Edge.
-
-2. Connect the ESP32 board to your computer with a USB cable.
-
-3. Click **Connect** and select the serial port of the ESP32.
-
-4. Click **Add File**.
-
-5. Select the firmware file:
-
-   ```text
-   firmware/satura-bridge-v0.0.15.bin
-   ```
-
-6. Set the flash address to:
-
-   ```text
-   0x0
-   ```
-
-7. Click **Program**.
-
-8. When flashing is complete, click **Reset** on the device.
-
-> **Important:** The browser flasher requires Web Serial support. Google Chrome and Microsoft Edge are recommended. Firefox does not support Web Serial.
+| Board                | Flash | Firmware                                                    |
+| -------------------- | ----- | ----------------------------------------------------------- |
+| Generic ESP32 DevKit | 2 MB  | `firmware/generic/satura-bridge-generic-full.bin`           |
+| M5Stack Core2        | 16 MB | `firmware/core2/satura-bridge-core2-full.bin`               |
+| M5StickC Plus2       | 8 MB  | `firmware/stickc_plus2/satura-bridge-stickc_plus2-full.bin` |
 
 ---
 
-### Option 2 — esptool
+# Option 1 — ESP-IDF
 
-**Python required.**
+**Recommended for development.**
 
-Install `esptool`:
+ESP-IDF v5.4.x is required.
 
-```bash
-pip install esptool
+The repository contains an independent build directory for each board.
+
+## M5Stack Core2
+
+Build the Core2 firmware:
+
+```powershell
+.\build.ps1 core2
 ```
 
-Flash the firmware:
+Flash it to COM6:
 
-```bash
-esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.15.bin
+```powershell
+idf.py -B build\core2 -p COM6 flash
 ```
 
-Replace `COM3` with the serial port of your ESP32.
+Flash and open the serial monitor:
 
-Examples:
+```powershell
+idf.py -B build\core2 -p COM6 flash monitor
+```
 
-* Windows: `COM3`
-* Linux: `/dev/ttyUSB0`
-* macOS: `/dev/cu.usbserial-XXXX`
+Replace `COM6` with the actual serial port of the board.
 
-If your version of `esptool` uses the older command syntax, use:
+## Generic ESP32
 
-```bash
-esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura-bridge-v0.0.15.bin
+```powershell
+.\build.ps1 generic
+idf.py -B build\generic -p COM3 flash
+```
+
+## M5StickC Plus2
+
+```powershell
+.\build.ps1 plus2
+idf.py -B build\stickc_plus2 -p COM3 flash
 ```
 
 ---
 
-### Option 3 — Build from Source
+# Option 2 — Full firmware image with esptool
 
-This option requires ESP-IDF v5.4.x.
+The build script creates a merged firmware image containing the bootloader, partition table and application.
 
-Clone the repository:
+The merged image is designed to be flashed at address `0x0`.
 
-```bash
-git clone --recursive https://github.com/sigildeveloper/satura-bridge
-cd satura-bridge
+## M5Stack Core2
+
+```powershell
+python -m esptool --chip esp32 --port COM6 --baud 460800 write-flash 0x0 firmware\core2\satura-bridge-core2-full.bin
 ```
 
-Build the project:
+## Generic ESP32
 
-```bash
-idf.py build
+```powershell
+python -m esptool --chip esp32 --port COM3 --baud 460800 write-flash 0x0 firmware\generic\satura-bridge-generic-full.bin
 ```
 
-Flash the ESP32 and open the serial monitor:
+## M5StickC Plus2
 
-```bash
-idf.py flash monitor
+```powershell
+python -m esptool --chip esp32 --port COM3 --baud 460800 write-flash 0x0 firmware\stickc_plus2\satura-bridge-stickc_plus2-full.bin
 ```
 
----
+Replace the COM port with the port assigned to your board.
 
-## First Boot
+If your installed esptool uses the older command syntax:
 
-After you flash the firmware:
-
-1. Enable Bluetooth on your phone.
-
-2. Find **Satura Bridge** in the Bluetooth device list.
-
-3. Pair and connect the phone to **Satura Bridge**.
-
-4. Open any HTTP URL in the phone browser.
-
-   You can also open:
-
-   ```text
-   http://192.168.7.1
-   ```
-
-5. The Satura Bridge setup page should appear.
-
-6. Enter the Wi-Fi network name and password.
-
-7. Save the settings.
-
-Satura Bridge connects to the configured Wi-Fi network. It then provides Internet access to the connected phone through Bluetooth PAN.
-
----
-
-# Прошивка
-
-## Способ 1 — Онлайн-прошивка
-
-**Без дополнительного программного обеспечения. Рекомендуется.**
-
-Самый простой способ прошить Satura Bridge — использовать веб-прошивальщик ESP Web Tools.
-
-1. Откройте https://esp.huhn.me в Google Chrome или Microsoft Edge.
-
-2. Подключите ESP32 к компьютеру с помощью USB-кабеля.
-
-3. Нажмите **Connect** и выберите последовательный порт ESP32.
-
-4. Нажмите **Add File**.
-
-5. Выберите файл прошивки:
-
-   ```text
-   firmware/satura-bridge-v0.0.15.bin
-   ```
-
-6. Укажите адрес прошивки:
-
-   ```text
-   0x0
-   ```
-
-7. Нажмите **Program**.
-
-8. После завершения прошивки нажмите **Reset** на устройстве.
-
-> **Важно:** Веб-прошивальщик требует поддержки Web Serial. Рекомендуется использовать Google Chrome или Microsoft Edge. Firefox не поддерживает Web Serial.
-
----
-
-## Способ 2 — esptool
-
-**Требуется Python.**
-
-Установите `esptool`:
-
-```bash
-pip install esptool
-```
-
-Прошейте устройство:
-
-```bash
-esptool --port COM3 --baud 460800 write-flash 0x0 firmware/satura-bridge-v0.0.15.bin
-```
-
-Замените `COM3` на последовательный порт ESP32.
-
-Примеры:
-
-* Windows: `COM3`
-* Linux: `/dev/ttyUSB0`
-* macOS: `/dev/cu.usbserial-XXXX`
-
-Если ваша версия `esptool` использует старый синтаксис, выполните:
-
-```bash
-esptool.py --port COM3 --baud 460800 write_flash 0x0 firmware/satura-bridge-v0.0.15.bin
+```powershell
+esptool.py --port COM6 --baud 460800 write_flash 0x0 firmware\core2\satura-bridge-core2-full.bin
 ```
 
 ---
 
-## Способ 3 — Сборка из исходного кода
+# Option 3 — Browser-based flashing
 
-Для этого способа требуется ESP-IDF v5.4.x.
+A merged full firmware image can also be flashed using an ESP32-compatible Web Serial flasher.
 
-Клонируйте репозиторий:
+Recommended browsers:
 
-```bash
-git clone --recursive https://github.com/sigildeveloper/satura-bridge
-cd satura-bridge
+* Google Chrome
+* Microsoft Edge
+
+Firefox does not currently provide the required Web Serial support.
+
+## M5Stack Core2
+
+Use:
+
+```text
+firmware/core2/satura-bridge-core2-full.bin
 ```
 
-Соберите проект:
+Flash address:
 
-```bash
-idf.py build
+```text
+0x0
 ```
 
-Прошейте ESP32 и откройте монитор последовательного порта:
+## Generic ESP32
 
-```bash
-idf.py flash monitor
+Use:
+
+```text
+firmware/generic/satura-bridge-generic-full.bin
+```
+
+Flash address:
+
+```text
+0x0
+```
+
+## M5StickC Plus2
+
+Use:
+
+```text
+firmware/stickc_plus2/satura-bridge-stickc_plus2-full.bin
+```
+
+Flash address:
+
+```text
+0x0
 ```
 
 ---
 
-## Первый запуск
+# Building firmware
 
-После прошивки:
+The recommended build command is:
 
-1. Включите Bluetooth на телефоне.
+```powershell
+.\build.ps1
+```
 
-2. Найдите **Satura Bridge** в списке Bluetooth-устройств.
+This builds all supported boards.
 
-3. Выполните сопряжение и подключите телефон к **Satura Bridge**.
+The output is:
 
-4. Откройте любую HTTP-страницу в браузере телефона.
+```text
+firmware/
+├── generic/
+│   └── satura-bridge-generic-full.bin
+├── core2/
+│   └── satura-bridge-core2-full.bin
+└── stickc_plus2/
+    └── satura-bridge-stickc_plus2-full.bin
+```
 
-   Можно также открыть:
+To build only one board:
 
-   ```text
-   http://192.168.7.1
-   ```
+```powershell
+.\build.ps1 generic
+.\build.ps1 core2
+.\build.ps1 plus2
+```
 
-5. Должна открыться страница настройки Satura Bridge.
+For a complete clean rebuild:
 
-6. Введите имя и пароль Wi-Fi сети.
+```powershell
+.\build.ps1 rebuild
+```
 
-7. Сохраните настройки.
+For one board:
 
-Satura Bridge подключится к указанной Wi-Fi сети. После этого Satura Bridge предоставит подключённому телефону доступ в интернет через Bluetooth PAN.
+```powershell
+.\build.ps1 rebuild core2
+```
+
+The build script does not flash any board.
+
+---
+
+# ESP-IDF menuconfig
+
+Each board has its own independent configuration.
+
+Generic:
+
+```powershell
+idf.py -B build\generic menuconfig
+```
+
+M5Stack Core2:
+
+```powershell
+idf.py -B build\core2 menuconfig
+```
+
+M5StickC Plus2:
+
+```powershell
+idf.py -B build\stickc_plus2 menuconfig
+```
+
+The resulting configurations are stored in:
+
+```text
+build/generic/sdkconfig
+build/core2/sdkconfig
+build/stickc_plus2/sdkconfig
+```
+
+Common defaults are stored in:
+
+```text
+sdkconfig.defaults
+```
+
+Board-specific defaults are stored in:
+
+```text
+sdkconfig.defaults.generic
+sdkconfig.defaults.core2
+sdkconfig.defaults.stickc_plus2
+```
+
+---
+
+# First Boot
+
+After flashing:
+
+1. Reset or power-cycle the board.
+2. Enable Bluetooth on the phone.
+3. Find **Satura Bridge**.
+4. Pair with the device.
+5. If a PIN is requested, use `0000`.
+6. Connect the phone to Satura Bridge through Bluetooth PAN.
+7. Open the phone browser.
+8. Open:
+
+```text
+http://192.168.7.1
+```
+
+9. Configure the Wi-Fi uplink.
+
+Saved Wi-Fi networks survive reboot.
+
+---
+
+# Serial Monitor
+
+For M5Stack Core2:
+
+```powershell
+idf.py -B build\core2 -p COM6 monitor
+```
+
+To flash and monitor in one command:
+
+```powershell
+idf.py -B build\core2 -p COM6 flash monitor
+```
+
+Exit the monitor with:
+
+```text
+Ctrl+]
+```
+
+---
+
+# Important
+
+Do not use a firmware image from another board profile.
+
+For example:
+
+```text
+M5Stack Core2 → core2 firmware
+M5StickC Plus2 → stickc_plus2 firmware
+Generic ESP32 → generic firmware
+```
+
+The profiles use different flash sizes and board-specific hardware initialization.
+
+In particular:
+
+* Generic ESP32 uses a 2 MB flash configuration.
+* M5Stack Core2 uses a 16 MB flash configuration.
+* M5StickC Plus2 uses an 8 MB flash configuration.
+
+The full images produced by `build.ps1` are already merged and must be flashed at offset `0x0`.

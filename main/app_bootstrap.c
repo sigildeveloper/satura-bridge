@@ -37,6 +37,7 @@
 #include "clipboard.h"
 #include "device_name.h"
 #include "battery.h"
+#include "board/board.h"
 
 static const char *TAG = "satura_bridge";
 
@@ -82,6 +83,7 @@ static dhcp_config_t dhcp_config = {
 
 int btstack_main(int argc, const char *argv[]) {
     (void)argc; (void)argv;
+    board_init();
     uptime_init();
 
     /* Redundant with the nvs_flash_init() in main.c's app_main(), but

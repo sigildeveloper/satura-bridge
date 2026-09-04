@@ -1,0 +1,5 @@
+# Combined with the common sdkconfig.defaults via SDKCONFIG_DEFAULTS.
+CONFIG_SATURA_BOARD_STICKC_PLUS2=y
+
+# M5StickC Plus2: 8 MB SPI Flash
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y

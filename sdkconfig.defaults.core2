@@ -1,0 +1,4 @@
+# Combined with the common sdkconfig.defaults via SDKCONFIG_DEFAULTS.
+CONFIG_SATURA_BOARD_CORE2=y
+
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y

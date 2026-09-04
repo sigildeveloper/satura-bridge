@@ -287,11 +287,20 @@ esp_err_t handler_root(httpd_req_t *req) {
     wifi_manager_get_ip(ip_buf, sizeof(ip_buf));
 
     char battery_line[48] = {0};
+
     int batt_pct = battery_get_percent();
+
     if (batt_pct >= 0) {
-        snprintf(battery_line, sizeof(battery_line),
-                 "<br><b>Battery:</b> %d%%%s", batt_pct,
-                 battery_is_charging() ? " (charging)" : "");
+        if (battery_charging_status_available()) {
+            snprintf(battery_line, sizeof(battery_line),
+                     "<br><b>Battery:</b> %d%%%s",
+                     batt_pct,
+                     battery_is_charging() ? " (charging)" : "");
+        } else {
+            snprintf(battery_line, sizeof(battery_line),
+                     "<br><b>Battery:</b> %d%%",
+                     batt_pct);
+        }
     }
 
     snprintf(page, 3072, PAGE_STATUS_FMT,

@@ -1,3 +1,15 @@
+# Exactly one board backend is compiled in, selected via Kconfig
+# (menu "Satura Bridge" -> "Hardware board", see main/Kconfig).
+# Application code never changes based on this choice — only
+# main/board/ does. See main/board/board.h for the interface.
+if(CONFIG_SATURA_BOARD_CORE2)
+    set(BOARD_SRCS "board/board_core2.c")
+elseif(CONFIG_SATURA_BOARD_STICKC_PLUS2)
+    set(BOARD_SRCS "board/board_stickc_plus2.c")
+else()
+    set(BOARD_SRCS "board/board_generic.c")
+endif()
+
 idf_component_register(
     SRCS
         "app_bootstrap.c"
@@ -21,6 +33,7 @@ idf_component_register(
         "event_bus.c"
         "storage.c"
         "watchdog.c"
+        ${BOARD_SRCS}
 
     INCLUDE_DIRS "."
 
@@ -35,4 +48,5 @@ idf_component_register(
         esp_timer
         esp_coex
         driver
+        esp_adc
 )

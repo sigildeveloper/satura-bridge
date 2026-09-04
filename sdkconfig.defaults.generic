@@ -1,0 +1,3 @@
+# Combined with the common sdkconfig.defaults via SDKCONFIG_DEFAULTS —
+# see the build commands in README.md / this file's accompanying note.
+CONFIG_SATURA_BOARD_GENERIC=y
