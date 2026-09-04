@@ -52,7 +52,7 @@ Satura Bridge now has separate board profiles.
 
 | Board                    | Flash | Battery / Power                   | Build profile |
 | ------------------------ | ----- | --------------------------------- | ------------- |
-| Generic ESP32 DevKit     | 2 MB  | No board-specific battery support | `generic`     |
+| Generic ESP32 DevKit (ESP32-WROOM-32U recommended) | 2 MB  | No board-specific battery support | `generic`     |
 | M5Stack Core2 (original) | 16 MB | AXP192 battery / charging         | `core2`       |
 | M5StickC Plus2           | 8 MB  | Battery voltage via ADC           | `plus2`       |
 
@@ -681,7 +681,7 @@ Satura Bridge позволяет старым телефонам с Bluetooth п
 
 | Плата                                | Flash | Профиль сборки |
 | ------------------------------------ | ----- | -------------- |
-| Generic ESP32 DevKit                 | 2 MB  | `generic`      |
+| Generic ESP32 DevKit (рекомендуется ESP32-WROOM-32U) | 2 MB  | `generic`      |
 | M5Stack Core2 (оригинальный, AXP192) | 16 MB | `core2`        |
 | M5StickC Plus2                       | 8 MB  | `plus2`        |
 
