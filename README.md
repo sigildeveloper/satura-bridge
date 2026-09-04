@@ -7,7 +7,7 @@ Open-source Bluetooth Classic PAN → Internet gateway for legacy mobile phones 
 Satura Bridge currently uses **Bluetooth Classic PAN as the downlink** and **Wi-Fi as the Internet uplink**.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.0.15-green.svg)](https://github.com/sigildeveloper/satura-bridge/releases/tag/v0.0.15)
+[![Version](https://img.shields.io/badge/version-v0.0.16-green.svg)](https://github.com/sigildeveloper/satura-bridge/releases/tag/v0.0.16)
 [![Community](https://img.shields.io/badge/Telegram-nnmidletschat-blue?logo=telegram)](https://t.me/nnmidletschat)
 
 ---
@@ -93,9 +93,14 @@ It uses a **2 MB flash configuration**.
 * Web-based configuration
 * Captive-portal-style setup
 * Up to 6 saved Wi-Fi networks
+* Hidden Wi-Fi network support
 * Wi-Fi scanning and signal-based network selection
 * Automatic connection recovery and failover
 * Watchdog and component recovery
+* Shared web clipboard / pasteboard
+* Persistent clipboard history and favorites
+* Automatic HTTP/HTTPS link detection in clipboard
+* Configurable Bluetooth device name
 * HTTP proxy gateway
 * HTTP POST body forwarding through the proxy
 * Proxy hostname resolution with cached IPv4 address
@@ -106,6 +111,128 @@ It uses a **2 MB flash configuration**.
 * Board abstraction layer
 * Independent build configurations for supported boards
 * Single-file full firmware images
+
+---
+
+# Wi-Fi Network Management
+
+Satura Bridge can store up to **6 Wi-Fi networks** and automatically select a suitable saved network.
+
+Open:
+
+```text
+http://192.168.7.1/networks
+```
+
+The page provides:
+
+* Wi-Fi scanning
+* nearby access-point list with RSSI
+* saved-network management
+* adding and removing networks
+* automatic network selection
+* manual connection attempts
+* support for hidden SSIDs
+
+### Hidden Wi-Fi networks
+
+A hidden network does not broadcast its SSID in beacon frames, so it normally cannot appear in a scan result.
+
+To add one:
+
+1. Open `/networks`.
+2. Use **Add Network**.
+3. Enter the exact SSID.
+4. Enter the password, if required.
+5. Enable **This network is hidden (not broadcasting its name)**.
+6. Save the network.
+
+Satura Bridge will then attempt the saved hidden network even when it is absent from the scan results.
+
+The hidden flag is stored together with the saved network and survives reboot.
+
+> **Upgrade note:** v0.0.16 changes the stored Wi-Fi network structure by adding the hidden-network flag. Existing saved Wi-Fi credentials from older firmware may need to be added again after upgrading.
+
+---
+
+# Clipboard / Pasteboard
+
+Satura Bridge includes a small shared web clipboard designed specifically for old phones with awkward text input.
+
+Open:
+
+```text
+http://192.168.7.1/clip
+```
+
+The same clipboard can be used from:
+
+* the legacy phone connected through Bluetooth PAN;
+* a computer connected to the Wi-Fi network/LAN;
+* another device that can reach the bridge web interface.
+
+### Typical use
+
+For example, typing a long URL on a T9 keypad is inconvenient.
+
+Instead:
+
+1. Connect the old phone to Satura Bridge over Bluetooth PAN.
+2. From a computer, open `http://192.168.7.1/clip`.
+3. Paste or type the long URL/text into the clipboard.
+4. Save it.
+5. Open the clipboard page from the phone.
+6. Use the saved entry on the phone.
+
+This is also useful for:
+
+* long URLs
+* long text snippets
+* WEP keys
+* game unlock codes
+* configuration strings
+* other text that is painful to enter on a legacy keypad
+
+### Clipboard storage
+
+The clipboard has:
+
+* **15 recent entries** in a persistent ring buffer;
+* up to **8 pinned/favorite entries**;
+* persistent storage across reboots;
+* delete and pin/unpin actions;
+* automatic recognition of HTTP/HTTPS links.
+
+When the recent-entry limit is reached, the oldest non-favorite entries are removed first. Pinned favorites are kept separately.
+
+---
+
+# Bluetooth Device Name
+
+The Bluetooth device name can be configured at:
+
+```text
+http://192.168.7.1/name
+```
+
+This is the name displayed by the phone when scanning for or pairing with Satura Bridge.
+
+On the first boot, if no custom name has been saved, Satura Bridge generates a unique default name such as:
+
+```text
+Satura Bridge A1B2
+```
+
+The suffix is derived from the last two bytes of the Bluetooth MAC address, so several bridges nearby do not all appear with the same name.
+
+To change it:
+
+1. Open `/name`.
+2. Enter the desired name.
+3. Save it.
+4. Reboot the bridge.
+
+The name is stored persistently in NVS and is used by the Bluetooth stack on the next boot.
 
 ---
 
@@ -201,59 +328,93 @@ These are not currently implemented as user-facing transports.
 
 ---
 
-# v0.0.15
+# v0.0.16
 
-v0.0.15 is primarily an **architecture, reliability and hardening release**.
-
-## Transport abstraction
-
-* Added `link_iface_t`.
-* Added `link_registry`.
-* `nat_bridge` no longer depends directly on BT PAN or Wi-Fi.
-* Added generic downlink/uplink link-state events.
-* Added the foundation for future Bluetooth PPP, Serial/IR, Ethernet and cellular modem transports.
-* `bt_pan` now reacts to `EVENT_BT_CONNECTED` instead of directly calling `wifi_manager`.
-
-## Reliability and security
-
-* DNS replies are accepted only when their source IP and port match the configured upstream DNS server.
-* Proxy relay no longer relies on HTTP/1.1 chunked response framing for legacy clients.
-* Proxy responses use HTTP/1.0-compatible framing with `Content-Length` or connection-close semantics.
-* Fixed `EVENT_TYPE_COUNT`, which could silently drop events added beyond the previous hardcoded count.
+v0.0.16 is a **feature and multi-board release** focused on making Satura Bridge easier to use with real legacy phones while expanding hardware support.
 
 ## Wi-Fi
 
-* Wi-Fi manager uses a single-owner queue-based state machine.
-* Connect, scan, retry and recovery operations are handled through the same state machine.
-* Improved connection recovery and failover behavior.
+* Added support for **hidden Wi-Fi networks**.
+* Hidden networks can be marked directly from `/setup` and `/networks`.
+* Hidden saved networks are attempted even when they are not present in scan results.
+* Wi-Fi disconnect logs now include the actual reason code, making real-world connection failures easier to diagnose.
+* Improved network management and scan-result presentation.
 
-## Code organization
+## Clipboard
 
-* NVS access is centralized behind the storage abstraction.
-* `http_server.c` was split into:
+* Added a shared web clipboard / pasteboard at `/clip`.
+* Clipboard data can be entered from a computer and read from the legacy phone.
+* Added persistent recent-entry history.
+* Added pinned/favorite entries.
+* Added HTTP/HTTPS link detection.
+* Fixed clipboard entries so text can be selected and copied by older browsers.
+* Fixed URL decoding so pasted links are stored as normal URLs instead of percent-encoded text.
 
-  * `http_routes.c`
-  * `proxy_relay.c`
-* The remaining `http_server.c` handles server startup and URI registration.
-* `pan_wifi_bridge.c` became `app_bootstrap.c`.
+## Bluetooth device name
 
-## Memory and build optimization
+* Added `/name` for changing the Bluetooth device name.
+* Custom names persist across reboots.
+* The default name is generated as `Satura Bridge XXXX` from the Bluetooth MAC address.
+* The new Bluetooth name is applied after reboot.
 
-* `-Os` is explicitly enabled.
-* Measured IRAM usage decreased from approximately **79.7% to 74.31%**.
-* Firmware image size decreased by approximately **65 KB**.
-* Added HTTP worker stack high-water-mark monitoring.
+## M5Stack Core2 battery status
 
-## Hardware testing
+* Added battery information for the original M5Stack Core2 using the AXP192 PMIC.
+* The status page can show battery percentage and charging state when supported by the selected board.
 
-v0.0.15 was tested on a Sony Ericsson J108 with:
+## Web interface
 
-* Bluetooth PAN connection
-* Bluetooth PAN reconnection
-* Wi-Fi failover
-* NAT following independent Bluetooth/Wi-Fi link state changes
-* HTTP proxy relay traffic
-* HTML, CSS and image loading through the proxy
+* Added dedicated **Manage Networks**, **Device Name** and **Clipboard** pages.
+* Improved the networks page by placing scan results near the top and providing a nearby “scan again” action.
+* Status page now exposes additional runtime information including battery status and proxy state.
+* Proxy configuration validates the port value server-side.
+
+## Bluetooth reliability
+
+* Improved recovery when the HCI connection disappears before BNEP is fully opened.
+* The bridge automatically restores Bluetooth visibility after disconnection, with delayed reopening to avoid busy loops.
+
+## Stability and security
+
+* Improved handling of NVS initialization failures on first boot.
+* Fixed a possible buffer overflow while loading saved networks.
+* Fixed DNS upstream source validation.
+* Improved proxy timeout handling.
+* Increased HTTP server stack size and added stack-headroom monitoring.
+* Legacy PIN pairing responds with `0000`.
+* SSP user confirmation is automatically accepted.
+
+## Multi-board support
+
+* Added a board abstraction layer under `main/board/`.
+* Added separate profiles for:
+  * Generic ESP32 DevKit
+  * M5Stack Core2 (original, AXP192)
+  * M5StickC Plus2
+* Added independent ESP-IDF configurations and build directories.
+* Added `build.ps1` for reproducible board-specific builds.
+* Added automatic generation of complete firmware images for each board.
+
+## Firmware
+
+The release contains separate full firmware images:
+
+```text
+firmware/
+├── generic/
+│   └── satura-bridge-generic-full.bin
+├── core2/
+│   └── satura-bridge-core2-full.bin
+└── stickc_plus2/
+    └── satura-bridge-stickc_plus2-full.bin
+```
+
+Each full image contains the bootloader, partition table and application and is intended to be flashed starting at `0x0`.
+
+## Migration note
+
+The saved Wi-Fi network structure changed in v0.0.16 because each network now stores a hidden-network flag. After upgrading from an older firmware version, re-add saved Wi-Fi networks if they are no longer recognized.
+
 
 ---
 
@@ -426,14 +587,16 @@ The web interface is available at:
 http://192.168.7.1
 ```
 
-| Page        | Description                               |
-| ----------- | ----------------------------------------- |
-| `/`         | Status, RSSI, uptime and heap information |
-| `/setup`    | Manual Wi-Fi configuration                |
-| `/networks` | Scan and manage saved Wi-Fi networks      |
-| `/proxy`    | Configure HTTP proxy gateway              |
-| `/reset`    | Remove all saved Wi-Fi networks           |
-| `/reboot`   | Restart the device                        |
+| Page        | Description                                           |
+| ----------- | ----------------------------------------------------- |
+| `/`         | Status, RSSI, uptime, heap, battery and proxy state   |
+| `/setup`    | Manual Wi-Fi configuration                            |
+| `/networks` | Scan and manage saved Wi-Fi networks, including hidden SSIDs |
+| `/proxy`    | Configure HTTP proxy gateway                          |
+| `/clip`     | Shared clipboard / pasteboard                         |
+| `/name`     | Configure the Bluetooth device name                   |
+| `/reset`    | Remove all saved Wi-Fi networks                       |
+| `/reboot`   | Restart the device                                    |
 
 ---
 
@@ -511,12 +674,16 @@ https://t.me/nnmidletschat
 * [x] NAT / routing
 * [x] Web configuration
 * [x] Multiple saved Wi-Fi networks
+* [x] Hidden Wi-Fi networks
 * [x] Wi-Fi scanning
 * [x] Connection recovery
 * [x] Watchdog
 * [x] Event bus
 * [x] Storage abstraction
 * [x] HTTP proxy gateway
+* [x] Web clipboard / pasteboard
+* [x] Clipboard history and favorites
+* [x] Configurable Bluetooth device name
 * [x] Proxy POST body forwarding
 * [x] Proxy hostname resolution
 * [x] Transport-agnostic link abstraction
@@ -880,10 +1047,14 @@ idf.py -B build\core2 -p COM6 flash monitor
 * Веб-интерфейс
 * Captive portal
 * До 6 сохранённых Wi-Fi сетей
+* Поддержка скрытых Wi-Fi сетей
 * Сканирование Wi-Fi
 * Автоматический выбор сети
 * Recovery / failover
 * Watchdog
+* Веб-клипборд / буфер обмена
+* История и избранные записи клипборда
+* Переименование Bluetooth-устройства
 * HTTP proxy gateway
 * POST body forwarding
 * Разрешение hostname proxy gateway
@@ -897,7 +1068,127 @@ idf.py -B build\core2 -p COM6 flash monitor
 
 ---
 
-## HTTP Proxy
+## Управление Wi-Fi сетями
+
+Satura Bridge может хранить до **6 Wi-Fi сетей** и автоматически выбирать подходящую сохранённую сеть.
+
+Откройте:
+
+```text
+http://192.168.7.1/networks
+```
+
+Здесь доступны:
+
+* сканирование Wi-Fi;
+* список найденных точек с RSSI;
+* управление сохранёнными сетями;
+* добавление и удаление сетей;
+* автоматический выбор сети;
+* ручная попытка подключения;
+* поддержка скрытых SSID.
+
+### Скрытые Wi-Fi сети
+
+Скрытая сеть не передаёт своё имя в beacon-пакетах, поэтому обычно не появляется в результатах сканирования.
+
+Чтобы добавить такую сеть:
+
+1. Откройте `/networks`.
+2. Выберите **Add Network**.
+3. Введите точный SSID.
+4. Введите пароль, если он нужен.
+5. Включите **This network is hidden (not broadcasting its name)**.
+6. Сохраните сеть.
+
+После этого Satura Bridge будет пытаться подключиться к сохранённой скрытой сети, даже если её нет среди результатов сканирования.
+
+Признак скрытой сети сохраняется вместе с сетью и переживает перезагрузку.
+
+> **Важно при обновлении:** в v0.0.16 изменилась структура сохранённых Wi-Fi сетей — добавлено поле hidden. После обновления со старой прошивки сохранённые сети может потребоваться добавить заново.
+
+---
+
+# Клипборд / буфер обмена
+
+В Satura Bridge есть общий веб-клипборд, специально предназначенный для старых телефонов, на которых неудобно вводить длинный текст.
+
+Откройте:
+
+```text
+http://192.168.7.1/clip
+```
+
+Один и тот же клипборд доступен:
+
+* со старого телефона через Bluetooth PAN;
+* с компьютера в Wi-Fi/LAN;
+* с другого устройства, имеющего доступ к веб-интерфейсу моста.
+
+### Как пользоваться
+
+Например, длинный URL неудобно вводить на T9-клавиатуре.
+
+1. Подключите старый телефон к Satura Bridge по Bluetooth PAN.
+2. На компьютере откройте `http://192.168.7.1/clip`.
+3. Вставьте или напечатайте длинный URL/текст.
+4. Сохраните запись.
+5. Откройте `/clip` с телефона.
+6. Используйте сохранённую запись на телефоне.
+
+Клипборд особенно полезен для:
+
+* длинных URL;
+* длинного текста;
+* WEP-ключей;
+* кодов разблокировки игр;
+* строк конфигурации;
+* других данных, которые неудобно набирать на старом телефоне.
+
+### Хранение
+
+Клипборд имеет:
+
+* **15 последних записей**;
+* до **8 закреплённых / избранных записей**;
+* сохранение после перезагрузки;
+* удаление и закрепление/открепление записей;
+* автоматическое распознавание HTTP/HTTPS ссылок.
+
+Когда история заполняется, самые старые обычные записи вытесняются. Закреплённые записи хранятся отдельно.
+
+---
+
+# Имя Bluetooth-устройства
+
+Имя Bluetooth можно изменить по адресу:
+
+```text
+http://192.168.7.1/name
+```
+
+Это имя видит телефон при поиске и сопряжении с Satura Bridge.
+
+Если пользовательское имя ещё не задано, при первом запуске создаётся уникальное имя вида:
+
+```text
+Satura Bridge A1B2
+```
+
+`A1B2` формируется из последних двух байт Bluetooth MAC. Поэтому несколько мостов рядом не будут отображаться как одинаковые устройства.
+
+Чтобы изменить имя:
+
+1. Откройте `/name`.
+2. Введите новое имя.
+3. Сохраните.
+4. Перезагрузите мост.
+
+Имя сохраняется в NVS и применяется Bluetooth-стеком при следующем запуске.
+
+---
+
+# HTTP Proxy
 
 Прокси настраивается через:
 
@@ -952,14 +1243,16 @@ http://192.168.7.1
 
 # Веб-интерфейс
 
-| Страница    | Назначение                       |
-| ----------- | -------------------------------- |
-| `/`         | Статус, RSSI, uptime, heap       |
-| `/setup`    | Настройка Wi-Fi                  |
-| `/networks` | Сканирование и управление сетями |
-| `/proxy`    | HTTP proxy                       |
-| `/reset`    | Удаление Wi-Fi сетей             |
-| `/reboot`   | Перезагрузка                     |
+| Страница    | Назначение                                      |
+| ----------- | ---------------------------------------------- |
+| `/`         | Статус, RSSI, uptime, heap, батарея, proxy      |
+| `/setup`    | Настройка Wi-Fi                                |
+| `/networks` | Сканирование и управление сетями, включая hidden SSID |
+| `/proxy`    | Настройка HTTP proxy                            |
+| `/clip`     | Общий клипборд / буфер обмена                   |
+| `/name`     | Переименование Bluetooth-устройства             |
+| `/reset`    | Удаление сохранённых Wi-Fi сетей                |
+| `/reboot`   | Перезагрузка                                    |
 
 ---
 
@@ -984,12 +1277,16 @@ Windows 10 пока не поддерживается.
 * [x] NAT / routing
 * [x] Web configuration
 * [x] Multiple Wi-Fi networks
+* [x] Hidden Wi-Fi networks
 * [x] Wi-Fi scanning
 * [x] Connection recovery
 * [x] Watchdog
 * [x] Event bus
 * [x] Storage abstraction
 * [x] HTTP proxy
+* [x] Web clipboard / pasteboard
+* [x] Clipboard history and favorites
+* [x] Configurable Bluetooth device name
 * [x] POST body forwarding
 * [x] Proxy hostname resolution
 * [x] Transport-agnostic link abstraction
@@ -1025,7 +1322,7 @@ Satura Bridge и Vetera Bridge нацелены на разные поколен
 
 # Лицензия
 
-MIT License.
+MIT License. Указание авторства, остальное не важно.
 
 BTstack в `components/btstack/` распространяется по собственной лицензии.
 
