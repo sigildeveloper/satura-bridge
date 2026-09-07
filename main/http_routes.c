@@ -322,22 +322,82 @@ esp_err_t handler_setup_get(httpd_req_t *req) {
 
 esp_err_t handler_setup_post(httpd_req_t *req) {
     char buf[256] = {0};
-    int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (rec <= 0) return ESP_FAIL;
-    buf[rec] = '\0';
-    char ns[64] = {0}, np[64] = {0}, hid_s[8] = {0};
-    if (httpd_query_key_value(buf, "ssid", ns, sizeof(ns)) == ESP_OK) {
-        httpd_query_key_value(buf, "pass", np, sizeof(np));
-        bool hidden = (httpd_query_key_value(buf, "hidden", hid_s, sizeof(hid_s)) == ESP_OK);
 
-        wifi_manager_set_credentials(ns, np, hidden);
+    int rec = httpd_req_recv(
+        req,
+        buf,
+        sizeof(buf) - 1
+    );
+
+    if (rec <= 0) {
+        return ESP_FAIL;
+    }
+
+    buf[rec] = '\0';
+
+    char ssid_enc[128] = {0};
+    char pass_enc[128] = {0};
+
+    char ssid[64] = {0};
+    char pass[64] = {0};
+
+    char hid_s[8] = {0};
+
+    if (httpd_query_key_value(
+            buf,
+            "ssid",
+            ssid_enc,
+            sizeof(ssid_enc)
+        ) == ESP_OK) {
+
+        httpd_query_key_value(
+            buf,
+            "pass",
+            pass_enc,
+            sizeof(pass_enc)
+        );
+
+        url_decode(
+            ssid_enc,
+            ssid,
+            sizeof(ssid)
+        );
+
+        url_decode(
+            pass_enc,
+            pass,
+            sizeof(pass)
+        );
+
+        bool hidden =
+            (httpd_query_key_value(
+                buf,
+                "hidden",
+                hid_s,
+                sizeof(hid_s)
+            ) == ESP_OK);
+
+        wifi_manager_set_credentials(
+            ssid,
+            pass,
+            hidden
+        );
+
         app_state_set(APP_WIFI_CONNECTING);
+
         wifi_manager_start_connect();
 
         httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/");
+
+        httpd_resp_set_hdr(
+            req,
+            "Location",
+            "/"
+        );
+
         return httpd_resp_send(req, NULL, 0);
     }
+
     return ESP_OK;
 }
 
@@ -505,19 +565,75 @@ esp_err_t handler_networks_get(httpd_req_t *req) {
 
 esp_err_t handler_networks_add_post(httpd_req_t *req) {
     char buf[256] = {0};
+
     int rec = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (rec <= 0) return ESP_FAIL;
+
+    if (rec <= 0) {
+        return ESP_FAIL;
+    }
+
     buf[rec] = '\0';
-    char ns[64] = {0}, np[64] = {0}, hid_s[8] = {0};
-    if (httpd_query_key_value(buf, "ssid", ns, sizeof(ns)) == ESP_OK) {
-        httpd_query_key_value(buf, "pass", np, sizeof(np));
-        bool hidden = (httpd_query_key_value(buf, "hidden", hid_s, sizeof(hid_s)) == ESP_OK);
-        wifi_manager_add_network(ns, np, hidden);
+
+    char ssid_enc[128] = {0};
+    char pass_enc[128] = {0};
+    char hid_s[8] = {0};
+
+    char ssid[64] = {0};
+    char pass[64] = {0};
+
+    if (httpd_query_key_value(
+            buf,
+            "ssid",
+            ssid_enc,
+            sizeof(ssid_enc)
+        ) == ESP_OK) {
+
+        httpd_query_key_value(
+            buf,
+            "pass",
+            pass_enc,
+            sizeof(pass_enc)
+        );
+
+        url_decode(
+            ssid_enc,
+            ssid,
+            sizeof(ssid)
+        );
+
+        url_decode(
+            pass_enc,
+            pass,
+            sizeof(pass)
+        );
+
+        bool hidden =
+            (httpd_query_key_value(
+                buf,
+                "hidden",
+                hid_s,
+                sizeof(hid_s)
+            ) == ESP_OK);
+
+        wifi_manager_add_network(
+            ssid,
+            pass,
+            hidden
+        );
+
         app_state_set(APP_WIFI_CONNECTING);
+
         wifi_manager_start_connect();
     }
+
     httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "/");
+
+    httpd_resp_set_hdr(
+        req,
+        "Location",
+        "/"
+    );
+
     return httpd_resp_send(req, NULL, 0);
 }
 
