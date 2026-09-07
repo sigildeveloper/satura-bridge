@@ -36,7 +36,7 @@ void http_server_start(void) {
             { "/*",                HTTP_GET,  handler_proxy_relay,        NULL },
             { "/*",                HTTP_POST, handler_proxy_relay,        NULL },
         };
-        for (int i = 0; i < 19; i++)
+        for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
             httpd_register_uri_handler(http_server, &uris[i]);
         httpd_register_err_handler(http_server,
                                    HTTPD_404_NOT_FOUND, handler_404);
