@@ -6,6 +6,8 @@
 #include "clipboard.h"
 #include "http_utils.h"
 #include "storage.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define CLIP_NVS_KEY "clipboard"
 #define PAGE_BUF     8192
@@ -26,6 +28,11 @@ typedef struct {
 
 static clip_store_t g_store;
 static bool g_loaded = false;
+static SemaphoreHandle_t g_store_mutex = NULL;
+
+static void clip_lock_init(void) { if (!g_store_mutex) g_store_mutex = xSemaphoreCreateMutex(); }
+static bool clip_lock(void) { clip_lock_init(); return g_store_mutex && xSemaphoreTake(g_store_mutex, portMAX_DELAY) == pdTRUE; }
+static void clip_unlock(void) { if (g_store_mutex) xSemaphoreGive(g_store_mutex); }
 
 static void clip_save(void) {
     storage_set_blob(CLIP_NVS_KEY, &g_store, sizeof(g_store));
@@ -168,10 +175,11 @@ static size_t render_entry(char *page, size_t len, size_t cap,
 
 esp_err_t handler_clip_get(httpd_req_t *req) {
     clipboard_init();
+    if (!clip_lock()) return ESP_ERR_NO_MEM;
     set_no_cache(req, "text/html");
 
     char *page = malloc(PAGE_BUF);
-    if (!page) return ESP_ERR_NO_MEM;
+    if (!page) { clip_unlock(); return ESP_ERR_NO_MEM; }
     size_t len = 0;
 
     len += snprintf(page + len, PAGE_BUF - len,
@@ -214,11 +222,13 @@ esp_err_t handler_clip_get(httpd_req_t *req) {
 
     esp_err_t r = httpd_resp_sendstr(req, page);
     free(page);
+    clip_unlock();
     return r;
 }
 
 esp_err_t handler_clip_add_post(httpd_req_t *req) {
     clipboard_init();
+    if (!clip_lock()) return ESP_ERR_NO_MEM;
 
     /* Free-text paste, urlencoded by the form submit — allow generous
      * room for %XX-expansion of the CLIP_TEXT_MAX decoded result.
@@ -226,9 +236,9 @@ esp_err_t handler_clip_add_post(httpd_req_t *req) {
      * '&'/'=' — it does NOT url-decode (same reason
      * handler_networks_connect_get calls url_decode() separately). */
     char *buf = malloc(900);
-    if (!buf) return ESP_ERR_NO_MEM;
+    if (!buf) { clip_unlock(); return ESP_ERR_NO_MEM; }
     int rec = httpd_req_recv(req, buf, 899);
-    if (rec <= 0) { free(buf); return ESP_FAIL; }
+    if (rec <= 0) { free(buf); clip_unlock(); return ESP_FAIL; }
     buf[rec] = '\0';
 
     char raw[900] = {0};
@@ -238,14 +248,17 @@ esp_err_t handler_clip_add_post(httpd_req_t *req) {
         clip_add(text);
     }
     free(buf);
+    clip_unlock();
 
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/clip");
+    clip_unlock();
     return httpd_resp_send(req, NULL, 0);
 }
 
 esp_err_t handler_clip_action_get(httpd_req_t *req) {
     clipboard_init();
+    if (!clip_lock()) return ESP_ERR_NO_MEM;
 
     char query[64] = {0};
     char op[16] = {0};
@@ -262,5 +275,6 @@ esp_err_t handler_clip_action_get(httpd_req_t *req) {
 
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/clip");
+    clip_unlock();
     return httpd_resp_send(req, NULL, 0);
 }

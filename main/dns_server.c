@@ -310,6 +310,9 @@ void dns_server_watchdog_tick(uint32_t now_ms) {
             ESP_LOGE(TAG, "[WDT] DNS hang! Signalling restart...");
 
             dns_restart_flag = true;
+            /* Interrupt blocking recvfrom() calls before starting a replacement. */
+            if (dns_srv_sock >= 0) shutdown(dns_srv_sock, SHUT_RDWR);
+            if (dns_ext_sock >= 0) shutdown(dns_ext_sock, SHUT_RDWR);
             taskENTER_CRITICAL(&dns_mux);
             dns_task_handle = NULL;
             taskEXIT_CRITICAL(&dns_mux);

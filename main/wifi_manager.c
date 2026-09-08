@@ -77,6 +77,7 @@ static int candidate_attempt = 0;
 
 static wifi_scan_result_t scan_results[WIFI_MAX_SCAN_RESULTS];
 static int scan_result_count = 0;
+static volatile bool scan_in_progress = false;
 
 static esp_netif_t *sta_netif = NULL;
 
@@ -200,7 +201,11 @@ static const link_iface_t wifi_uplink_link = {
 };
 
 bool wifi_manager_scan_in_progress(void) {
-    return fsm_state == WFSM_CONNECTING; /* scanning happens as part of connecting */
+    bool in_progress;
+    taskENTER_CRITICAL(&wifi_mux);
+    in_progress = scan_in_progress;
+    taskEXIT_CRITICAL(&wifi_mux);
+    return in_progress;
 }
 
 int wifi_manager_get_scan_results(wifi_scan_result_t *out, int max_count) {
@@ -220,6 +225,11 @@ static void wifi_post_evt(wifi_evt_type_t type) {
     wifi_evt_t evt = { .type = type };
     if (xQueueSend(wifi_evt_queue, &evt, 0) != pdTRUE) {
         ESP_LOGW(TAG, "[WIFI] event queue full, dropping event %d", (int)type);
+        if (type == WEVT_SCAN_REQUEST) {
+            taskENTER_CRITICAL(&wifi_mux);
+            scan_in_progress = false;
+            taskEXIT_CRITICAL(&wifi_mux);
+        }
     }
 }
 
@@ -228,6 +238,13 @@ void wifi_manager_start_connect(void) {
 }
 
 void wifi_manager_scan_start(void) {
+    /* Set this before posting the event. The HTTP handler redirects
+     * immediately, so the next /networks request can arrive before the
+     * worker has actually started scanning. */
+    taskENTER_CRITICAL(&wifi_mux);
+    scan_in_progress = true;
+    taskEXIT_CRITICAL(&wifi_mux);
+
     wifi_post_evt(WEVT_SCAN_REQUEST);
 }
 
@@ -245,22 +262,57 @@ void wifi_manager_schedule_recovery(void) {
 
 static void run_blocking_scan_and_store_results(void) {
     wifi_scan_config_t scan_cfg = {0};
-    esp_wifi_scan_start(&scan_cfg, true);
+
+    taskENTER_CRITICAL(&wifi_mux);
+    scan_in_progress = true;
+    taskEXIT_CRITICAL(&wifi_mux);
+
+    esp_err_t err = esp_wifi_scan_start(&scan_cfg, true);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "[WIFI] scan start failed: %s", esp_err_to_name(err));
+        taskENTER_CRITICAL(&wifi_mux);
+        scan_in_progress = false;
+        taskEXIT_CRITICAL(&wifi_mux);
+        return;
+    }
 
     uint16_t ap_count = 0;
-    esp_wifi_scan_get_ap_num(&ap_count);
+    err = esp_wifi_scan_get_ap_num(&ap_count);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "[WIFI] scan get AP count failed: %s", esp_err_to_name(err));
+        taskENTER_CRITICAL(&wifi_mux);
+        scan_in_progress = false;
+        taskEXIT_CRITICAL(&wifi_mux);
+        return;
+    }
+
     if (ap_count == 0) {
+        ESP_LOGW(TAG, "[WIFI] scan completed: no access points found");
         scan_result_count = 0;
+        taskENTER_CRITICAL(&wifi_mux);
+        scan_in_progress = false;
+        taskEXIT_CRITICAL(&wifi_mux);
         return;
     }
     if (ap_count > 32) ap_count = 32;
 
     wifi_ap_record_t *records = malloc(sizeof(wifi_ap_record_t) * ap_count);
-    if (!records) return;
+    if (!records) {
+        ESP_LOGE(TAG, "[WIFI] scan results allocation failed");
+        taskENTER_CRITICAL(&wifi_mux);
+        scan_in_progress = false;
+        taskEXIT_CRITICAL(&wifi_mux);
+        return;
+    }
 
     uint16_t actual = ap_count;
-    if (esp_wifi_scan_get_ap_records(&actual, records) != ESP_OK) {
+    err = esp_wifi_scan_get_ap_records(&actual, records);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "[WIFI] scan get AP records failed: %s", esp_err_to_name(err));
         free(records);
+        taskENTER_CRITICAL(&wifi_mux);
+        scan_in_progress = false;
+        taskEXIT_CRITICAL(&wifi_mux);
         return;
     }
 
@@ -297,6 +349,12 @@ static void run_blocking_scan_and_store_results(void) {
     }
 
     free(records);
+
+    ESP_LOGI(TAG, "[WIFI] scan completed: %d unique network(s)", scan_result_count);
+
+    taskENTER_CRITICAL(&wifi_mux);
+    scan_in_progress = false;
+    taskEXIT_CRITICAL(&wifi_mux);
 }
 
 static void build_candidate_list(void) {

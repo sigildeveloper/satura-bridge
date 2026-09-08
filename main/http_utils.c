@@ -1,4 +1,5 @@
 #include <string.h>
+#include "lwip/sockets.h"
 #include "http_utils.h"
 #include "config.h"
 #include "wifi_manager.h"
@@ -21,6 +22,53 @@ void set_no_cache(httpd_req_t *req, const char *type) {
     httpd_resp_set_type(req, type);
     httpd_resp_set_hdr(req, "Cache-Control",
                        "no-cache, no-store, must-revalidate");
+}
+
+/*
+ * Streams a page directly to the client socket in small pieces instead of
+ * rendering it into one big malloc'd buffer first (the pattern that used
+ * to allocate 3-8 KB per request in handler_clip_get/handler_networks_get/
+ * handler_status — a single contiguous allocation that size can fail
+ * under DRAM fragmentation with WiFi+BT both active, where free heap is
+ * commonly only 35-65 KB).
+ *
+ * This intentionally does NOT use httpd_resp_send_chunk(): that always
+ * frames the body as HTTP/1.1 "Transfer-Encoding: chunked", which is
+ * exactly what makes the WAP/J2ME-era target browsers ECONNRESET (see the
+ * comment on relay_bytes_httpd() in proxy_relay.c). Instead this writes a
+ * plain HTTP/1.0 header with "Connection: close" straight to the socket —
+ * old browsers already know that means "read until the socket closes" —
+ * and the caller sends body pieces the same way with http_raw_send().
+ */
+int http_raw_response_start(httpd_req_t *req, const char *content_type) {
+    int sock = httpd_req_to_sockfd(req);
+    if (sock < 0) return -1;
+
+    char hdr[192];
+    int len = snprintf(hdr, sizeof(hdr),
+        "HTTP/1.0 200 OK\r\n"
+        "Content-Type: %s\r\n"
+        "Cache-Control: no-cache, no-store, must-revalidate\r\n"
+        "Connection: close\r\n\r\n",
+        content_type);
+    if (len < 0) return -1;
+    if (len >= (int)sizeof(hdr)) len = (int)sizeof(hdr) - 1;
+
+    if (send(sock, hdr, len, 0) < 0) return -1;
+    return sock;
+}
+
+bool http_raw_send(int sockfd, const char *data, size_t len) {
+    return send(sockfd, data, len, 0) >= 0;
+}
+
+void http_raw_response_end(httpd_req_t *req, int sockfd) {
+    /* We wrote the response straight to the socket, bypassing
+     * httpd_resp_send()/httpd_resp_send_chunk() entirely, so httpd has no
+     * idea the response is finished. Tell it explicitly so the session
+     * slot is freed immediately — same reasoning as relay_bytes_httpd()
+     * in proxy_relay.c. */
+    httpd_sess_trigger_close(req->handle, sockfd);
 }
 
 bool host_matches_bridge(const char *host_no_port) {

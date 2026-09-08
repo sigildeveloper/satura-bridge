@@ -56,9 +56,8 @@ void safe_task_create(TaskFunction_t fn, const char *name,
                               uint32_t stack, void *arg,
                               UBaseType_t prio, TaskHandle_t *handle) {
     if (xTaskCreate(fn, name, stack, arg, prio, handle) != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create task %s, rebooting...", name);
-        vTaskDelay(pdMS_TO_TICKS(200));
-        esp_restart();
+        ESP_LOGE(TAG, "Failed to create task %s", name);
+        if (handle) *handle = NULL;
     }
 }
 

@@ -4,6 +4,7 @@
 #include "btstack.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/portmacro.h"
@@ -35,7 +36,8 @@ static btstack_packet_callback_registration_t hci_event_cb;
 
 static volatile bool rssi_poll_pending = false;
 
-static void bt_reopen_task(void *arg);
+static void bt_reopen_main_cb(void *context);
+static void bt_reopen_timer_cb(void *arg);
 static void hci_packet_handler(uint8_t type, uint16_t ch,
                                 uint8_t *pkt, uint16_t sz);
 static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
@@ -123,18 +125,35 @@ static void bt_set_visible(bool v) {
     ESP_LOGI(TAG, "[BT] %s", v ? "visible" : "hidden");
 }
 
-static void bt_reopen_task(void *arg) {
-    (void)arg;
-    ESP_LOGW(TAG, "[BTR] started, heap=%u",
-             heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
-    vTaskDelay(pdMS_TO_TICKS(BT_REOPEN_DELAY_MS));
-
+static void bt_reopen_main_cb(void *context) {
+    (void)context;
     if (!get_bt_connected()) bt_set_visible(true);
-
     taskENTER_CRITICAL(&bt_pan_mux);
     bt_reopen_running = false;
     taskEXIT_CRITICAL(&bt_pan_mux);
-    vTaskDelete(NULL);
+}
+
+static btstack_context_callback_registration_t bt_reopen_cb_reg = {
+    .callback = bt_reopen_main_cb,
+    .context = NULL,
+};
+
+static void bt_reopen_timer_cb(void *arg) {
+    (void)arg;
+    btstack_run_loop_execute_on_main_thread(&bt_reopen_cb_reg);
+}
+
+static void bt_schedule_reopen(void) {
+    esp_timer_handle_t timer = NULL;
+    const esp_timer_create_args_t args = { .callback = bt_reopen_timer_cb, .arg = NULL, .name = "bt_reopen" };
+    if (esp_timer_create(&args, &timer) == ESP_OK) {
+        if (esp_timer_start_once(timer, (uint64_t)BT_REOPEN_DELAY_MS * 1000ULL) != ESP_OK) {
+            esp_timer_delete(timer);
+            taskENTER_CRITICAL(&bt_pan_mux); bt_reopen_running = false; taskEXIT_CRITICAL(&bt_pan_mux);
+        }
+    } else {
+        taskENTER_CRITICAL(&bt_pan_mux); bt_reopen_running = false; taskEXIT_CRITICAL(&bt_pan_mux);
+    }
 }
 
 /* ============================================================
@@ -181,7 +200,7 @@ static void hci_packet_handler(uint8_t type, uint16_t ch,
 
                 if (!already) {
                     ESP_LOGW(TAG, "[BTR] HCI disconnect without BNEP open, recovering visibility");
-                    safe_task_create(bt_reopen_task, "btr", 4096, NULL, 4, NULL);
+                    bt_schedule_reopen();
                 }
             }
             break;
@@ -268,7 +287,7 @@ static void bnep_lwip_packet_handler(uint8_t type, uint16_t ch,
                 ESP_LOGW(TAG, "[BTR] create #%d heap=%u",
                          bt_reopen_counter,
                          heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
-                safe_task_create(bt_reopen_task, "btr", 4096, NULL, 4, NULL);
+                bt_schedule_reopen();
             } else {
                 ESP_LOGW(TAG, "[BTR] already running, skip create");
             }

@@ -26,7 +26,12 @@ bool storage_get_u8(const char *key, uint8_t *out) {
 bool storage_set_u8(const char *key, uint8_t value) {
     nvs_handle_t h;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_set_u8(h, key, value);
+    esp_err_t err = nvs_set_u8(h, key, value);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_set_u8 failed: %s", esp_err_to_name(err));
+        nvs_close(h);
+        return false;
+    }
     return commit_and_close(h);
 }
 
@@ -41,7 +46,8 @@ bool storage_get_u16(const char *key, uint16_t *out) {
 bool storage_set_u16(const char *key, uint16_t value) {
     nvs_handle_t h;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_set_u16(h, key, value);
+    esp_err_t err = nvs_set_u16(h, key, value);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "nvs_set_u16 failed: %s", esp_err_to_name(err)); nvs_close(h); return false; }
     return commit_and_close(h);
 }
 
@@ -57,7 +63,8 @@ bool storage_get_str(const char *key, char *out, size_t len) {
 bool storage_set_str(const char *key, const char *value) {
     nvs_handle_t h;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_set_str(h, key, value);
+    esp_err_t err = nvs_set_str(h, key, value);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "nvs_set_str failed: %s", esp_err_to_name(err)); nvs_close(h); return false; }
     return commit_and_close(h);
 }
 
@@ -73,13 +80,15 @@ bool storage_get_blob(const char *key, void *out, size_t len) {
 bool storage_set_blob(const char *key, const void *data, size_t len) {
     nvs_handle_t h;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_set_blob(h, key, data, len);
+    esp_err_t err = nvs_set_blob(h, key, data, len);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "nvs_set_blob failed: %s", esp_err_to_name(err)); nvs_close(h); return false; }
     return commit_and_close(h);
 }
 
 bool storage_erase_key(const char *key) {
     nvs_handle_t h;
     if (nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return false;
-    nvs_erase_key(h, key);
+    esp_err_t err = nvs_erase_key(h, key);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "nvs_erase_key failed: %s", esp_err_to_name(err)); nvs_close(h); return false; }
     return commit_and_close(h);
 }

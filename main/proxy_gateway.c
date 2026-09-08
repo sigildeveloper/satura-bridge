@@ -6,6 +6,8 @@
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "proxy_gateway.h"
 #include "storage.h"
@@ -20,6 +22,11 @@ static const char *TAG = "proxy_gateway";
 
 static proxy_gateway_config_t g_cfg;
 static bool g_loaded = false;
+static SemaphoreHandle_t g_cfg_mutex = NULL;
+
+static void cfg_lock_init(void) { if (!g_cfg_mutex) g_cfg_mutex = xSemaphoreCreateMutex(); }
+static bool cfg_lock(void) { cfg_lock_init(); return g_cfg_mutex && xSemaphoreTake(g_cfg_mutex, portMAX_DELAY) == pdTRUE; }
+static void cfg_unlock(void) { if (g_cfg_mutex) xSemaphoreGive(g_cfg_mutex); }
 
 static void set_defaults(proxy_gateway_config_t *cfg)
 {
@@ -60,13 +67,15 @@ void proxy_gateway_load(proxy_gateway_config_t *out)
         return;
     }
 
+    if (!cfg_lock()) return;
     load_locked();
     *out = g_cfg;
+    cfg_unlock();
 }
 
 bool proxy_gateway_save(const proxy_gateway_config_t *cfg)
 {
-    if (!cfg) {
+    if (!cfg || !cfg_lock()) {
         return false;
     }
 
@@ -83,6 +92,7 @@ bool proxy_gateway_save(const proxy_gateway_config_t *cfg)
      */
     if (normalized.enabled && normalized.host[0] == '\0') {
         ESP_LOGW(TAG, "refusing to enable proxy gateway with empty host");
+        cfg_unlock();
         return false;
     }
 
@@ -97,16 +107,15 @@ bool proxy_gateway_save(const proxy_gateway_config_t *cfg)
         g_loaded = true;
     }
 
+    cfg_unlock();
     return ok;
 }
 
 void proxy_gateway_invalidate_cache(void)
 {
-    if (!g_loaded) {
-        return;
-    }
-
-    g_cfg.resolved_ip[0] = '\0';
+    if (!cfg_lock()) return;
+    if (g_loaded) g_cfg.resolved_ip[0] = '\0';
+    cfg_unlock();
 }
 
 static bool resolve_ipv4(const char *host, char *ip_out, size_t ip_len)
@@ -156,8 +165,11 @@ static bool resolve_ipv4(const char *host, char *ip_out, size_t ip_len)
 
 bool proxy_gateway_is_enabled(void)
 {
+    if (!cfg_lock()) return false;
     load_locked();
-    return g_cfg.enabled && g_cfg.host[0] != '\0' && g_cfg.port != 0;
+    bool enabled = g_cfg.enabled && g_cfg.host[0] != '\0' && g_cfg.port != 0;
+    cfg_unlock();
+    return enabled;
 }
 
 void proxy_gateway_get_upstream(char *host_out, size_t host_len,
@@ -170,11 +182,10 @@ void proxy_gateway_get_upstream(char *host_out, size_t host_len,
         *port_out = 0;
     }
 
+    if (!cfg_lock()) return;
     load_locked();
 
-    if (!g_cfg.host[0] || g_cfg.port == 0) {
-        return;
-    }
+    if (!g_cfg.host[0] || g_cfg.port == 0) { cfg_unlock(); return; }
 
     /*
      * proxy_relay.c opens an AF_INET socket and therefore expects an
@@ -184,6 +195,7 @@ void proxy_gateway_get_upstream(char *host_out, size_t host_len,
     if (g_cfg.resolved_ip[0] == '\0') {
         if (!resolve_ipv4(g_cfg.host, g_cfg.resolved_ip,
                           sizeof(g_cfg.resolved_ip))) {
+            cfg_unlock();
             return;
         }
         ESP_LOGI(TAG, "resolved %s -> %s", g_cfg.host, g_cfg.resolved_ip);
@@ -193,7 +205,6 @@ void proxy_gateway_get_upstream(char *host_out, size_t host_len,
         strncpy(host_out, g_cfg.resolved_ip, host_len - 1);
         host_out[host_len - 1] = '\0';
     }
-    if (port_out) {
-        *port_out = g_cfg.port;
-    }
+    if (port_out) { *port_out = g_cfg.port; }
+    cfg_unlock();
 }

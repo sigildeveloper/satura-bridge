@@ -286,5 +286,6 @@ esp_err_t handler_proxy_relay(httpd_req_t *req) {
 
     shutdown(upstream_sock, SHUT_RDWR);
     close(upstream_sock);
+    httpd_sess_trigger_close(req->handle, httpd_req_to_sockfd(req));
     return ESP_OK;
 }
